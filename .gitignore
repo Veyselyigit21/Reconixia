@@ -1,0 +1,37 @@
+# Build artifacts
+/reconixia
+/reconixia-report
+/reconixia-augment
+/reconixia-diff
+*.exe
+*.out
+*.test
+
+# Scan results and generated reports
+/results/
+/snapshots/
+*.log
+captured_data.txt
+report.html
+report.json
+report.md
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+id_rsa
+id_ed25519
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Temporary files
+/tmp/
+*.tmp
+*.bak

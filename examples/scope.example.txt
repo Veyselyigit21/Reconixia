@@ -1,0 +1,6 @@
+# Allow rules
+*.example.com
+example.com
+
+# Keep this file strict for private bug bounty programs.
+# Lines beginning with # are ignored.

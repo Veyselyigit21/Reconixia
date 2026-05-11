@@ -1,0 +1,39 @@
+name: Go CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-active-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Go version
+        run: go version
+
+      - name: Format active code in runner
+        run: |
+          gofmt -w internal cmd/reconixia-v06 cmd/reconixia-report cmd/reconixia-augment cmd/reconixia-diff
+
+      - name: Build active tools
+        run: |
+          go build -o /tmp/reconixia ./cmd/reconixia-v06
+          go build -o /tmp/reconixia-report ./cmd/reconixia-report
+          go build -o /tmp/reconixia-augment ./cmd/reconixia-augment
+          go build -o /tmp/reconixia-diff ./cmd/reconixia-diff
+
+      - name: Test active packages
+        run: |
+          go test ./internal/...
+          go test ./cmd/reconixia-v06 ./cmd/reconixia-report ./cmd/reconixia-augment ./cmd/reconixia-diff
