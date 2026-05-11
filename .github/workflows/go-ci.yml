@@ -22,9 +22,12 @@ jobs:
       - name: Go version
         run: go version
 
-      - name: Format active code in runner
+      - name: Format active Go code in runner
         run: |
-          gofmt -w internal cmd/reconixia-v06 cmd/reconixia-report cmd/reconixia-augment cmd/reconixia-diff
+          gofmt -w internal cmd/reconixia-v06 cmd/reconixia-report cmd/reconixia-augment cmd/reconixia-diff cmd/reconixia-ai-structured
+
+      - name: Unit tests
+        run: go test ./...
 
       - name: Build active tools
         run: |
@@ -32,8 +35,9 @@ jobs:
           go build -o /tmp/reconixia-report ./cmd/reconixia-report
           go build -o /tmp/reconixia-augment ./cmd/reconixia-augment
           go build -o /tmp/reconixia-diff ./cmd/reconixia-diff
+          go build -o /tmp/reconixia-ai-structured ./cmd/reconixia-ai-structured
 
-      - name: Test active packages
+      - name: Shell script smoke checks
         run: |
-          go test ./internal/...
-          go test ./cmd/reconixia-v06 ./cmd/reconixia-report ./cmd/reconixia-augment ./cmd/reconixia-diff
+          bash -n scripts/*.sh
+          bash -n scripts/lib/*.sh
