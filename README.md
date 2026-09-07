@@ -457,3 +457,7 @@ Araç kullanıldıkça yeni ihtiyaçlara göre geliştirilecektir. Hata çıktı
 ## Güvenli kullanım notu
 
 Reconixia yalnızca test etmeye yetkili olduğun hedeflerde kullanılmalıdır. Scope dosyanı sıkı tut. Araç; keşif, hedef önceliklendirme, güvenli discovery ve raporlama için tasarlanmıştır.
+
+## Lisans
+
+Reconixia, [Apache License 2.0](LICENSE) ile lisanslanmıştır.
