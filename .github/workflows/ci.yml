@@ -26,10 +26,19 @@ jobs:
 
       - name: Report formatting drift
         run: |
-          gofmt -l . || true
+          files="$(gofmt -l .)"
+          if [ -n "$files" ]; then
+            echo "$files"
+            exit 1
+          fi
 
       - name: Run tests
         run: go test ./...
 
       - name: Build active tools
         run: bash scripts/build_all.sh
+
+      - name: Shell script syntax checks
+        run: |
+          bash -n scripts/*.sh
+          bash -n scripts/lib/*.sh

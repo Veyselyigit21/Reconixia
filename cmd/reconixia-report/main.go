@@ -12,10 +12,15 @@ import (
 )
 
 func main() {
-	target := flag.String("target", "", "hedef domain")
-	input := flag.String("input", "", "report.json yolu")
-	output := flag.String("output", "", "report.html çıktı yolu")
+	target := flag.String("target", "", "target domain")
+	input := flag.String("input", "", "report.json path")
+	output := flag.String("output", "", "report.html output path")
+	labMode := flag.Bool("lab-mode", false, "allow localhost/private lab targets")
 	flag.Parse()
+
+	if *labMode {
+		_ = os.Setenv("RECONIXIA_LAB_MODE", "1")
+	}
 
 	in := strings.TrimSpace(*input)
 	out := strings.TrimSpace(*output)
@@ -27,7 +32,7 @@ func main() {
 		}
 		t, ok := safety.NormalizeTarget(*target)
 		if !ok {
-			fmt.Fprintln(os.Stderr, "hata: geçersiz hedef")
+			fmt.Fprintln(os.Stderr, "hata: gecersiz hedef")
 			os.Exit(1)
 		}
 		in = filepath.Join("results", t, "report.json")
@@ -40,5 +45,5 @@ func main() {
 		fmt.Fprintln(os.Stderr, "hata:", err)
 		os.Exit(1)
 	}
-	fmt.Println("HTML rapor oluşturuldu:", out)
+	fmt.Println("HTML rapor olusturuldu:", out)
 }

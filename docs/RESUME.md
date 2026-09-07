@@ -1,89 +1,69 @@
 # Reconixia Resume / Checkpoint
 
-Reconixia'da iki seviyeli resume planı vardır:
+Reconixia now has two resume layers.
 
-1. Script-level resume: bugün kullanılan pratik akış.
-2. Native v06 resume: ileride `./reconixia run --resume` olarak eklenecek daha ince taneli akış.
+## Native Go Resume
 
-## Script-level resume
+Use native granular resume directly through the active binary:
 
-Kullanım:
+```bash
+./reconixia run -target example.com -profile balanced -resume
+```
+
+Reset the native checkpoint and start over:
+
+```bash
+./reconixia run -target example.com -profile balanced -resume -reset-resume
+```
+
+Native checkpoint file:
+
+```txt
+results/example.com/checkpoint_run.json
+```
+
+Tracked native steps:
+
+```txt
+subfinder
+httpx
+passive
+js
+discover
+headers
+nuclei
+takeover
+report
+```
+
+Each step persists its own output files under `results/<target>/raw` or `results/<target>/processed`, so interrupted scans can reuse prior work instead of repeating the entire recon phase.
+
+## Full Scan Resume
+
+The full-scan wrapper still tracks the higher-level workflow:
 
 ```bash
 make full-scan-resume TARGET=example.com
 ```
 
-Sıfırdan başlatmak için:
+Reset both the wrapper flow and native Go checkpoint:
 
 ```bash
 make full-scan-resume TARGET=example.com RESET=true
 ```
 
-Script:
-
-```txt
-scripts/full_scan_resume.sh
-```
-
-Checkpoint dosyası:
+Wrapper checkpoint file:
 
 ```txt
 results/example.com/checkpoint_full_scan.json
 ```
 
-## Aşamalar
-
-Script-level resume üç ana aşamayı takip eder:
+Wrapper steps:
 
 ```txt
-1. recon
-2. augment
-3. report
-```
-
-Örnek checkpoint:
-
-```json
-{
-  "target": "example.com",
-  "completed_steps": {
-    "recon": true,
-    "augment": true,
-    "report": true
-  },
-  "last_step": "report",
-  "updated_at": "2026-05-11T00:00:00Z"
-}
-```
-
-## Davranış
-
-- `recon` tamamlandıysa tekrar çalıştırılmaz.
-- `augment` tamamlandıysa tekrar çalıştırılmaz.
-- `report` tamamlandıysa tekrar çalıştırılmaz.
-- `RESET=true` verilirse checkpoint silinir ve akış baştan başlar.
-
-## Neden script-level resume?
-
-`cmd/reconixia-v06/main.go` şu an tek dosyada yoğun bir akış taşıyor. Native `--resume` doğrudan bu dosyaya büyük patch gerektirir. Script-level resume daha düşük riskli bir ara çözümdür ve bugün kullanılabilir.
-
-## Sonraki native resume planı
-
-İleride `cmd/reconixia-v06` içine şu adımlar için checkpoint eklenecek:
-
-```txt
-subdomains
-live_hosts
-passive_urls
-js_endpoints
-interesting_paths
-headers
-nuclei
+recon
+augment
 report
 ```
 
-Hedef komut:
-
-```bash
-./reconixia run -target example.com --resume
-```
+`scripts/full_scan_resume.sh` calls `./reconixia run ... -resume`, so the `recon` phase itself is granular even when the wrapper is used.

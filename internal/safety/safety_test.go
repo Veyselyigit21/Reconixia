@@ -7,7 +7,7 @@ func TestNormalizeTargetAcceptsDomainsAndURLs(t *testing.T) {
 		"example.com":              "example.com",
 		"HTTPS://Sub.Example.COM":  "sub.example.com",
 		"https://example.com/path": "example.com",
-		"example.com:443":         "example.com",
+		"example.com:443":          "example.com",
 	}
 
 	for input, want := range cases {
@@ -39,6 +39,34 @@ func TestNormalizeTargetRejectsUnsafeInputs(t *testing.T) {
 	for _, input := range cases {
 		if got, ok := NormalizeTarget(input); ok {
 			t.Fatalf("NormalizeTarget(%q) = %q, want rejection", input, got)
+		}
+	}
+}
+
+func TestLabModeAllowsLoopbackAndPrivateButNotMetadata(t *testing.T) {
+	t.Setenv("RECONIXIA_LAB_MODE", "1")
+
+	allowedTargets := []string{"localhost", "127.0.0.1", "10.0.0.1", "192.168.1.1"}
+	for _, input := range allowedTargets {
+		if _, ok := NormalizeTarget(input); !ok {
+			t.Fatalf("NormalizeTarget(%q) rejected in lab mode", input)
+		}
+	}
+
+	allowedURLs := []string{"http://localhost:3000", "http://127.0.0.1:8080", "http://10.0.0.5"}
+	for _, input := range allowedURLs {
+		if !IsSafeFetchURL(input) {
+			t.Fatalf("IsSafeFetchURL(%q) rejected in lab mode", input)
+		}
+	}
+
+	blocked := []string{"169.254.169.254", "100.100.100.200", "http://169.254.169.254/latest/meta-data/"}
+	for _, input := range blocked {
+		if got, ok := NormalizeTarget(input); ok {
+			t.Fatalf("NormalizeTarget(%q) = %q in lab mode, want rejection", input, got)
+		}
+		if IsSafeFetchURL(input) {
+			t.Fatalf("IsSafeFetchURL(%q) allowed metadata target in lab mode", input)
 		}
 	}
 }

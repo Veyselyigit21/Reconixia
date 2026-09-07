@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reconixia</title>
+    <link rel="stylesheet" href="panel.css">
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <div>
+          <div class="eyebrow">[ RECONIXIA AI ]</div>
+          <h1>NETWORK COLLECTOR</h1>
+          <p>Owned-account request capture for IDOR/BOLA replay.</p>
+        </div>
+        <div class="actions">
+          <button id="toggle" type="button">Pause</button>
+          <button id="clear" type="button">Clear</button>
+          <button id="copyJsonl" type="button">Copy JSONL</button>
+          <button id="downloadJsonl" type="button">Download</button>
+          <button id="copyIdorJsonl" type="button">Copy IDOR</button>
+          <button id="downloadIdorJsonl" type="button">Download IDOR</button>
+        </div>
+      </header>
+
+      <section class="filters">
+        <label>
+          Search
+          <input id="search" type="search" placeholder="api, user, account, order">
+        </label>
+        <label>
+          Method
+          <select id="method">
+            <option value="">All</option>
+            <option>GET</option>
+            <option>HEAD</option>
+            <option>OPTIONS</option>
+            <option>POST</option>
+            <option>PUT</option>
+            <option>PATCH</option>
+            <option>DELETE</option>
+          </select>
+        </label>
+        <label class="check">
+          <input id="apiOnly" type="checkbox" checked>
+          API only
+        </label>
+        <label class="check">
+          <input id="idorOnly" type="checkbox">
+          IDOR hints
+        </label>
+        <label class="check">
+          <input id="detailOnly" type="checkbox">
+          Object detail
+        </label>
+      </section>
+
+      <section class="stats">
+        <div><span>CAPTURED</span><b id="captured">0</b></div>
+        <div><span>VISIBLE</span><b id="visible">0</b></div>
+        <div><span>IDOR HINTS</span><b id="hints">0</b></div>
+        <div><span>DETAIL</span><b id="details">0</b></div>
+      </section>
+
+      <section class="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Status</th>
+              <th>Score</th>
+              <th>Hint</th>
+              <th>Operation</th>
+              <th>URL</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </section>
+    </main>
+    <script src="panel.js"></script>
+  </body>
+</html>

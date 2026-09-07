@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Reconixia Companion",
+  "description": "Authorized bug bounty helper for research headers, request capture, and IDOR/BOLA triage exports.",
+  "version": "0.1.0",
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Reconixia"
+  },
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "devtools_page": "devtools/devtools.html",
+  "permissions": [
+    "declarativeNetRequest",
+    "activeTab",
+    "scripting",
+    "tabs",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}

@@ -1,15 +1,21 @@
-.PHONY: help auto status ci validate install-tools build doctor full-scan full-scan-resume scan augment report structured-ai diff snapshot remote-existing cloud-do cloud-hetzner cloud-cleanup-do cloud-cleanup-hetzner ports screenshots params 403-candidates clean
+.PHONY: help auto status ci release-check release-artifacts validate install-tools build doctor full-scan full-scan-resume scan augment report structured-ai idor diff snapshot remote-existing cloud-do cloud-hetzner cloud-cleanup-do cloud-cleanup-hetzner ports screenshots params 403-candidates clean
 
 TARGET ?=
+VERSION ?= 0.9.0-rc1
 PROFILE ?= balanced
 SCOPE ?=
 OLD ?=
 NEW ?=
+OUTPUT ?=
+DIFF_HTML ?= false
 HOST ?=
 USER ?= root
 IDENTITY ?=
+H1_USER ?=
+RESEARCH_HEADER ?=
 DO_SSH_KEY_ID ?=
 HCLOUD_SSH_KEY ?=
+SSH_CIDR ?=
 REGION ?= fra1
 LOCATION ?= fsn1
 SIZE ?= s-1vcpu-1gb
@@ -22,23 +28,34 @@ RATE ?= 50
 TOP_PORTS ?= 1000
 LIMIT ?= 500
 RESET ?= false
+IDOR_INPUT ?=
+IDOR_HAR ?=
+IDOR_RULES ?=
+IDOR_OUTPUT ?=
+IDOR_RATE ?= 2
+IDOR_MAX ?= 50
+IDOR_ALLOW_MUTATING ?= false
 
 help:
 	@echo "Reconixia Make targets"
 	@echo "  make auto"
 	@echo "  make status"
 	@echo "  make ci"
+	@echo "  make release-check"
+	@echo "  make release-artifacts [VERSION=0.9.0-rc1]"
 	@echo "  make validate [TARGET=hedef.com]"
 	@echo "  make install-tools"
 	@echo "  make build"
 	@echo "  make doctor"
 	@echo "  make full-scan TARGET=hedef.com"
 	@echo "  make full-scan-resume TARGET=hedef.com [RESET=true]"
+	@echo "    Optional for production: H1_USER=hackerone_username"
 	@echo "  make scan TARGET=hedef.com"
 	@echo "  make augment TARGET=hedef.com"
 	@echo "  make report TARGET=hedef.com"
 	@echo "  make structured-ai TARGET=hedef.com"
-	@echo "  make diff OLD=snapshots/old/report.json NEW=snapshots/new/report.json"
+	@echo "  make idor TARGET=hedef.com IDOR_HAR=capture.har [IDOR_RULES=policy.json]"
+	@echo "  make diff OLD=snapshots/old/report.json NEW=snapshots/new/report.json [DIFF_HTML=true OUTPUT=diff.html]"
 	@echo "  make snapshot TARGET=hedef.com"
 	@echo "  make ports TARGET=hedef.com [RATE=50] [TOP_PORTS=1000]"
 	@echo "  make screenshots TARGET=hedef.com"
@@ -46,7 +63,9 @@ help:
 	@echo "  make 403-candidates TARGET=hedef.com [LIMIT=200]"
 	@echo "  make remote-existing HOST=1.2.3.4 TARGET=hedef.com IDENTITY=~/.ssh/id_rsa"
 	@echo "  make cloud-do TARGET=hedef.com DO_SSH_KEY_ID=123456 IDENTITY=~/.ssh/id_rsa"
+	@echo "    Optional: SSH_CIDR=1.2.3.4/32"
 	@echo "  make cloud-hetzner TARGET=hedef.com HCLOUD_SSH_KEY=my-key IDENTITY=~/.ssh/id_rsa"
+	@echo "    Optional: SSH_CIDR=1.2.3.4/32"
 	@echo "  make cloud-cleanup-do [MAX_AGE_HOURS=6] [APPLY=true]"
 	@echo "  make cloud-cleanup-hetzner [MAX_AGE_HOURS=6] [APPLY=true]"
 	@echo "  make clean"
@@ -62,6 +81,16 @@ status:
 ci:
 	chmod +x scripts/ci_local.sh
 	./scripts/ci_local.sh
+
+release-check:
+	@if [ -n "$$(gofmt -l internal cmd)" ]; then gofmt -l internal cmd; exit 1; fi
+	go test ./...
+	go build ./cmd/...
+	bash -n scripts/*.sh scripts/lib/*.sh
+
+release-artifacts: release-check
+	chmod +x scripts/release_artifacts.sh
+	VERSION="$(VERSION)" ./scripts/release_artifacts.sh
 
 validate:
 	chmod +x scripts/validate_setup.sh
@@ -80,15 +109,15 @@ doctor: build
 
 full-scan: build
 	@if [ -z "$(TARGET)" ]; then echo "TARGET gerekli: make full-scan TARGET=hedef.com"; exit 1; fi
-	./scripts/full_scan.sh -t "$(TARGET)" -p "$(PROFILE)" $(if $(SCOPE),-s "$(SCOPE)",) --no-nuclei
+	./scripts/full_scan.sh -t "$(TARGET)" -p "$(PROFILE)" $(if $(SCOPE),-s "$(SCOPE)",) --no-nuclei $(if $(H1_USER),--h1-user "$(H1_USER)",) $(if $(RESEARCH_HEADER),--research-header "$(RESEARCH_HEADER)",)
 
 full-scan-resume: build
 	@if [ -z "$(TARGET)" ]; then echo "TARGET gerekli: make full-scan-resume TARGET=hedef.com"; exit 1; fi
-	./scripts/full_scan_resume.sh -t "$(TARGET)" -p "$(PROFILE)" $(if $(SCOPE),-s "$(SCOPE)",) --no-nuclei $(if $(filter true,$(RESET)),--reset,)
+	./scripts/full_scan_resume.sh -t "$(TARGET)" -p "$(PROFILE)" $(if $(SCOPE),-s "$(SCOPE)",) --no-nuclei $(if $(filter true,$(RESET)),--reset,) $(if $(H1_USER),--h1-user "$(H1_USER)",) $(if $(RESEARCH_HEADER),--research-header "$(RESEARCH_HEADER)",)
 
 scan: build
 	@if [ -z "$(TARGET)" ]; then echo "TARGET gerekli: make scan TARGET=hedef.com"; exit 1; fi
-	./reconixia run -target "$(TARGET)" -profile "$(PROFILE)" $(if $(SCOPE),-scope "$(SCOPE)",) --no-nuclei
+	./reconixia run -target "$(TARGET)" -profile "$(PROFILE)" $(if $(SCOPE),-scope "$(SCOPE)",) --no-nuclei $(if $(H1_USER),-h1-user "$(H1_USER)",) $(if $(RESEARCH_HEADER),-research-header "$(RESEARCH_HEADER)",)
 
 augment: build
 	@if [ -z "$(TARGET)" ]; then echo "TARGET gerekli: make augment TARGET=hedef.com"; exit 1; fi
@@ -102,9 +131,14 @@ structured-ai: build
 	@if [ -z "$(TARGET)" ]; then echo "TARGET gerekli: make structured-ai TARGET=hedef.com"; exit 1; fi
 	./reconixia-ai-structured -target "$(TARGET)"
 
+idor: build
+	@if [ -z "$(TARGET)" ]; then echo "TARGET gerekli: make idor TARGET=whatnot.com IDOR_HAR=capture.har"; exit 1; fi
+	@if [ -z "$(IDOR_INPUT)" ] && [ -z "$(IDOR_HAR)" ]; then echo "IDOR_INPUT veya IDOR_HAR gerekli"; exit 1; fi
+	./reconixia-idor -target "$(TARGET)" $(if $(IDOR_INPUT),-input "$(IDOR_INPUT)",) $(if $(IDOR_HAR),-har "$(IDOR_HAR)",) $(if $(IDOR_RULES),-rules "$(IDOR_RULES)",) $(if $(IDOR_OUTPUT),-output "$(IDOR_OUTPUT)",) -rate "$(IDOR_RATE)" -max "$(IDOR_MAX)" $(if $(filter true,$(IDOR_ALLOW_MUTATING)),-allow-mutating,) $(if $(H1_USER),-h1-user "$(H1_USER)",) $(if $(RESEARCH_HEADER),-research-header "$(RESEARCH_HEADER)",)
+
 diff: build
 	@if [ -z "$(OLD)" ] || [ -z "$(NEW)" ]; then echo "OLD ve NEW gerekli: make diff OLD=... NEW=..."; exit 1; fi
-	./reconixia-diff -old "$(OLD)" -new "$(NEW)"
+	./reconixia-diff -old "$(OLD)" -new "$(NEW)" $(if $(filter true,$(DIFF_HTML)),-html,) $(if $(OUTPUT),-output "$(OUTPUT)",)
 
 snapshot:
 	@if [ -z "$(TARGET)" ]; then echo "TARGET gerekli: make snapshot TARGET=hedef.com"; exit 1; fi
@@ -140,13 +174,13 @@ cloud-do:
 	@if [ -z "$(TARGET)" ] || [ -z "$(DO_SSH_KEY_ID)" ]; then echo "TARGET ve DO_SSH_KEY_ID gerekli: make cloud-do TARGET=hedef.com DO_SSH_KEY_ID=123456"; exit 1; fi
 	@if [ -z "$$DIGITALOCEAN_TOKEN" ]; then echo "DIGITALOCEAN_TOKEN gerekli"; exit 1; fi
 	chmod +x scripts/cloud_do_safe.sh
-	./scripts/cloud_do_safe.sh -t "$(TARGET)" --ssh-key-id "$(DO_SSH_KEY_ID)" $(if $(IDENTITY),--identity "$(IDENTITY)",) -p "$(PROFILE)" $(if $(SCOPE),-s "$(SCOPE)",) --region "$(REGION)" --size "$(SIZE)" --image "$(IMAGE)"
+	./scripts/cloud_do_safe.sh -t "$(TARGET)" --ssh-key-id "$(DO_SSH_KEY_ID)" $(if $(IDENTITY),--identity "$(IDENTITY)",) -p "$(PROFILE)" $(if $(SCOPE),-s "$(SCOPE)",) --region "$(REGION)" --size "$(SIZE)" --image "$(IMAGE)" $(if $(SSH_CIDR),--ssh-cidr "$(SSH_CIDR)",)
 
 cloud-hetzner:
 	@if [ -z "$(TARGET)" ] || [ -z "$(HCLOUD_SSH_KEY)" ]; then echo "TARGET ve HCLOUD_SSH_KEY gerekli: make cloud-hetzner TARGET=hedef.com HCLOUD_SSH_KEY=my-key"; exit 1; fi
 	@if [ -z "$$HETZNER_TOKEN" ]; then echo "HETZNER_TOKEN gerekli"; exit 1; fi
 	chmod +x scripts/cloud_hetzner_safe.sh
-	./scripts/cloud_hetzner_safe.sh -t "$(TARGET)" --ssh-key "$(HCLOUD_SSH_KEY)" $(if $(IDENTITY),--identity "$(IDENTITY)",) -p "$(PROFILE)" $(if $(SCOPE),-s "$(SCOPE)",) --location "$(LOCATION)" --type "$(TYPE)" --image "$(HCLOUD_IMAGE)"
+	./scripts/cloud_hetzner_safe.sh -t "$(TARGET)" --ssh-key "$(HCLOUD_SSH_KEY)" $(if $(IDENTITY),--identity "$(IDENTITY)",) -p "$(PROFILE)" $(if $(SCOPE),-s "$(SCOPE)",) --location "$(LOCATION)" --type "$(TYPE)" --image "$(HCLOUD_IMAGE)" $(if $(SSH_CIDR),--ssh-cidr "$(SSH_CIDR)",)
 
 cloud-cleanup-do:
 	@if [ -z "$$DIGITALOCEAN_TOKEN" ]; then echo "DIGITALOCEAN_TOKEN gerekli"; exit 1; fi
@@ -159,4 +193,4 @@ cloud-cleanup-hetzner:
 	./scripts/cloud_cleanup.sh --provider hetzner --max-age-hours "$(MAX_AGE_HOURS)" $(if $(filter true,$(APPLY)),--apply,)
 
 clean:
-	rm -f reconixia reconixia-report reconixia-augment reconixia-diff reconixia-ai-structured
+	rm -f reconixia reconixia-report reconixia-augment reconixia-diff reconixia-ai-structured reconixia-idor

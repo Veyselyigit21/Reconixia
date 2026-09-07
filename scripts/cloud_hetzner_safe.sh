@@ -6,6 +6,7 @@ PROFILE="balanced"
 SCOPE=""
 IDENTITY=""
 SSH_KEY=""
+SSH_CIDR=""
 PASSTHROUGH=()
 
 usage() {
@@ -15,6 +16,9 @@ Usage:
 
 This wrapper validates input before delegating to cloud_hetzner_worker.sh.
 It exists to keep preflight logic separate from cloud lifecycle logic.
+
+Options passed through:
+  --ssh-cidr  CIDR allowed to SSH to the worker. If omitted, cloud_hetzner_worker.sh auto-detects it.
 EOF
 }
 
@@ -29,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     -i|--identity) IDENTITY="${2:-}"; PASSTHROUGH+=("$1" "$2"); shift 2 ;;
     -p|--profile) PROFILE="${2:-balanced}"; PASSTHROUGH+=("$1" "$2"); shift 2 ;;
     -s|--scope) SCOPE="${2:-}"; PASSTHROUGH+=("$1" "$2"); shift 2 ;;
+    --ssh-cidr) SSH_CIDR="${2:-}"; PASSTHROUGH+=("$1" "$2"); shift 2 ;;
     --location|--type|--image) PASSTHROUGH+=("$1" "${2:-}"); shift 2 ;;
     --with-nuclei) PASSTHROUGH+=("$1"); shift ;;
     -h|--help) usage; exit 0 ;;

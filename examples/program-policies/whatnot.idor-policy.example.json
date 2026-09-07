@@ -1,0 +1,28 @@
+{
+  "name": "Whatnot owned-account IDOR/BOLA policy",
+  "target": "whatnot.com",
+  "research_header": "X-HackerOne-Research",
+  "h1_user": "aello",
+  "rate": 2,
+  "max_requests": 50,
+  "require_owned_accounts": true,
+  "allow_mutating": false,
+  "allowed_methods": ["GET", "HEAD", "OPTIONS", "POST"],
+  "blocked_url_keywords": [
+    "/checkout",
+    "/bid",
+    "/purchase",
+    "/payment",
+    "/payout",
+    "/livestream/start",
+    "/livestream/create",
+    "/auction/start",
+    "/message/send"
+  ],
+  "notes": [
+    "Use only accounts owned and controlled by the researcher.",
+    "Use HackerOne alias accounts for eligibility when the program requires them.",
+    "Keep livestream and marketplace actions manual and inside program rules.",
+    "POST is included for read-only GraphQL query replay; GraphQL mutations remain blocked unless explicitly opted in."
+  ]
+}

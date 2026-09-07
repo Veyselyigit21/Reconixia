@@ -1,8 +1,10 @@
 package secrets
 
 import (
+	"math"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 type Match struct {
@@ -48,11 +50,56 @@ func Scan(body string) []Match {
 	seen := map[string]bool{}
 	var out []Match
 	for _, p := range defaultPatterns {
-		if p.Re.MatchString(body) && !seen[p.Type] {
+		for _, candidate := range p.Re.FindAllString(body, -1) {
+			if !credibleCandidate(candidate, p.Type) || seen[p.Type] {
+				continue
+			}
 			seen[p.Type] = true
-			out = append(out, Match{Type: p.Type, Confidence: p.Confidence, Note: p.Note})
+			out = append(out, Match{Type: p.Type, Confidence: p.Confidence, Note: p.Note + "; value redacted"})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Type < out[j].Type })
+	return out
+}
+
+func credibleCandidate(candidate, typ string) bool {
+	value := secretValue(candidate)
+	lower := strings.ToLower(value)
+	for _, marker := range []string{
+		"example", "dummy", "placeholder", "changeme", "change_me", "notasecret",
+		"fake", "sample", "your_", "xxxx", "yyyy", "zzzz", "0000000000", "1111111111",
+	} {
+		if strings.Contains(lower, marker) {
+			return false
+		}
+	}
+	if typ == "possible_generic_secret_assignment" && entropy(value) < 3.0 {
+		return false
+	}
+	return true
+}
+
+func secretValue(candidate string) string {
+	parts := regexp.MustCompile(`[\s:=]+`).Split(candidate, -1)
+	if len(parts) == 0 {
+		return candidate
+	}
+	return strings.Trim(parts[len(parts)-1], `"'`)
+}
+
+func entropy(s string) float64 {
+	if s == "" {
+		return 0
+	}
+	counts := map[rune]float64{}
+	for _, r := range s {
+		counts[r]++
+	}
+	var out float64
+	length := float64(len([]rune(s)))
+	for _, count := range counts {
+		p := count / length
+		out -= p * math.Log2(p)
+	}
 	return out
 }

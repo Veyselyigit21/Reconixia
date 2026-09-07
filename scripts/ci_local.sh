@@ -22,7 +22,7 @@ echo "[4/5] Build active tools"
 bash scripts/build_all.sh
 
 echo "[5/5] Smoke check binaries"
-for bin in reconixia reconixia-report reconixia-augment reconixia-diff reconixia-ai-structured; do
+for bin in reconixia reconixia-report reconixia-augment reconixia-diff reconixia-ai-structured reconixia-idor; do
   if [[ ! -x "./$bin" ]]; then
     echo "error: missing built binary: $bin" >&2
     exit 1

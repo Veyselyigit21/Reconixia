@@ -8,6 +8,8 @@ NO_NUCLEI=""
 NO_GAU=""
 NO_HEADERS=""
 RESET="false"
+H1_USER=""
+RESEARCH_HEADER=""
 
 usage() {
   cat <<'EOF'
@@ -22,10 +24,13 @@ Options:
       --no-gau       Skip GAU/Wayback passive URLs
       --no-headers   Skip CORS/security header analysis
       --reset        Remove existing checkpoint and start over
+      --h1-user      HackerOne username for X-HackerOne-Research header
+      --research-header Custom research header name, default X-HackerOne-Research
   -h, --help         Show help
 
 Checkpoint:
   results/<target>/checkpoint_full_scan.json
+  results/<target>/checkpoint_run.json
 EOF
 }
 
@@ -42,6 +47,8 @@ while [[ $# -gt 0 ]]; do
     --no-gau) NO_GAU="-no-gau"; shift ;;
     --no-headers) NO_HEADERS="-no-headers"; shift ;;
     --reset) RESET="true"; shift ;;
+    --h1-user) H1_USER="${2:-}"; shift 2 ;;
+    --research-header) RESEARCH_HEADER="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
@@ -59,6 +66,8 @@ mkdir -p "$WORKSPACE"
 if [[ "$RESET" == "true" ]]; then
   rm -f "$CHECKPOINT"
 fi
+if [[ -n "$H1_USER" ]]; then export RECONIXIA_H1_USERNAME="$H1_USER"; fi
+if [[ -n "$RESEARCH_HEADER" ]]; then export RECONIXIA_RESEARCH_HEADER_NAME="$RESEARCH_HEADER"; fi
 
 mark_done() {
   local step="$1"
@@ -110,11 +119,14 @@ rx_require_executable ./reconixia-augment
 rx_require_executable ./reconixia-report
 rx_require_cmd python3
 
-CMD=(./reconixia run -target "$TARGET" -profile "$PROFILE")
+CMD=(./reconixia run -target "$TARGET" -profile "$PROFILE" -resume)
 if [[ -n "$SCOPE" ]]; then CMD+=(-scope "$SCOPE"); fi
 if [[ -n "$NO_NUCLEI" ]]; then CMD+=($NO_NUCLEI); fi
 if [[ -n "$NO_GAU" ]]; then CMD+=($NO_GAU); fi
 if [[ -n "$NO_HEADERS" ]]; then CMD+=($NO_HEADERS); fi
+if [[ "$RESET" == "true" ]]; then CMD+=(-reset-resume); fi
+if [[ -n "$H1_USER" ]]; then CMD+=(-h1-user "$H1_USER"); fi
+if [[ -n "$RESEARCH_HEADER" ]]; then CMD+=(-research-header "$RESEARCH_HEADER"); fi
 
 if is_done recon; then
   echo "[1/3] Recon already completed, skipping."

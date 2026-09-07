@@ -3,6 +3,9 @@
 /reconixia-report
 /reconixia-augment
 /reconixia-diff
+/reconixia-ai-structured
+/reconixia-idor
+/dist/
 *.exe
 *.out
 *.test
@@ -10,6 +13,7 @@
 # Scan results and generated reports
 /results/
 /snapshots/
+/captures/
 *.log
 captured_data.txt
 report.html
@@ -24,6 +28,7 @@ report.md
 *.pem
 id_rsa
 id_ed25519
+.reconixia_known_hosts
 
 # Editor / OS
 .DS_Store

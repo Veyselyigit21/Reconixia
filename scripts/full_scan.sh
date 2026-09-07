@@ -7,6 +7,8 @@ SCOPE=""
 NO_NUCLEI=""
 NO_GAU=""
 NO_HEADERS=""
+H1_USER=""
+RESEARCH_HEADER=""
 
 usage() {
   cat <<'EOF'
@@ -20,6 +22,8 @@ Options:
       --no-nuclei    Skip nuclei
       --no-gau       Skip GAU/Wayback passive URLs
       --no-headers   Skip CORS/security header analysis
+      --h1-user      HackerOne username for X-HackerOne-Research header
+      --research-header Custom research header name, default X-HackerOne-Research
   -h, --help         Show help
 EOF
 }
@@ -36,6 +40,8 @@ while [[ $# -gt 0 ]]; do
     --no-nuclei) NO_NUCLEI="-no-nuclei"; shift ;;
     --no-gau) NO_GAU="-no-gau"; shift ;;
     --no-headers) NO_HEADERS="-no-headers"; shift ;;
+    --h1-user) H1_USER="${2:-}"; shift 2 ;;
+    --research-header) RESEARCH_HEADER="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
@@ -46,6 +52,8 @@ rx_validate_profile "$PROFILE"
 rx_validate_scope_optional "$SCOPE"
 
 cd "$ROOT_DIR"
+if [[ -n "$H1_USER" ]]; then export RECONIXIA_H1_USERNAME="$H1_USER"; fi
+if [[ -n "$RESEARCH_HEADER" ]]; then export RECONIXIA_RESEARCH_HEADER_NAME="$RESEARCH_HEADER"; fi
 
 if [[ ! -x ./reconixia || ! -x ./reconixia-augment || ! -x ./reconixia-report ]]; then
   echo "[i] Binaries not found, building first..."
@@ -65,6 +73,8 @@ fi
 if [[ -n "$NO_NUCLEI" ]]; then CMD+=($NO_NUCLEI); fi
 if [[ -n "$NO_GAU" ]]; then CMD+=($NO_GAU); fi
 if [[ -n "$NO_HEADERS" ]]; then CMD+=($NO_HEADERS); fi
+if [[ -n "$H1_USER" ]]; then CMD+=(-h1-user "$H1_USER"); fi
+if [[ -n "$RESEARCH_HEADER" ]]; then CMD+=(-research-header "$RESEARCH_HEADER"); fi
 
 echo "[1/3] Running recon..."
 "${CMD[@]}"

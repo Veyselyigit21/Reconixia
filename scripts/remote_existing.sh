@@ -9,6 +9,9 @@ PROFILE="balanced"
 SCOPE=""
 NO_NUCLEI="--no-nuclei"
 REMOTE_BASE="/tmp"
+KNOWN_HOSTS="${RECONIXIA_KNOWN_HOSTS:-}"
+STRICT_HOST_KEY="yes"
+ACCEPT_HOST_KEY="false"
 
 usage() {
   cat <<'EOF'
@@ -23,6 +26,11 @@ Options:
   -p, --profile   stealth|balanced|fast, default balanced
   -s, --scope     Scope file path
   --with-nuclei   Enable nuclei scan. Default is --no-nuclei for safer first runs.
+  --known-hosts   SSH known_hosts file. Default: ./.reconixia_known_hosts
+  --strict-host-key yes|no
+                  Verify SSH host keys. Default: yes
+  --accept-host-key
+                  Add the scanned host key without prompting, after printing its fingerprint.
   -h, --help      Show help
 
 Notes:
@@ -36,6 +44,72 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
 source "$ROOT_DIR/scripts/lib/preflight.sh"
 
+prepare_ssh_options() {
+  local known_hosts_dir tmp_scan answer
+  STRICT_HOST_KEY="$(printf '%s' "$STRICT_HOST_KEY" | tr '[:upper:]' '[:lower:]')"
+  case "$STRICT_HOST_KEY" in
+    yes|true|1) STRICT_HOST_KEY="yes" ;;
+    no|false|0) STRICT_HOST_KEY="no" ;;
+    *) echo "error: --strict-host-key must be yes or no" >&2; exit 1 ;;
+  esac
+
+  SSH_OPTS=(-o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+  if [[ "$STRICT_HOST_KEY" == "no" ]]; then
+    echo "[ssh] warning: strict host key checking disabled" >&2
+    SSH_OPTS+=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+    return
+  fi
+
+  rx_require_cmd ssh-keyscan
+  rx_require_cmd ssh-keygen
+
+  if [[ -z "$KNOWN_HOSTS" ]]; then
+    KNOWN_HOSTS="$ROOT_DIR/.reconixia_known_hosts"
+  fi
+  known_hosts_dir="$(dirname "$KNOWN_HOSTS")"
+  mkdir -p "$known_hosts_dir"
+  touch "$KNOWN_HOSTS"
+  chmod 600 "$KNOWN_HOSTS" >/dev/null 2>&1 || true
+
+  if ssh-keygen -F "$HOST" -f "$KNOWN_HOSTS" >/dev/null 2>&1; then
+    echo "[ssh] known_hosts entry found for $HOST"
+  else
+    tmp_scan="$(mktemp -t reconixia-known-host.XXXXXX)"
+    for _ in $(seq 1 30); do
+      if ssh-keyscan -T 5 -H "$HOST" > "$tmp_scan" 2>/dev/null && [[ -s "$tmp_scan" ]]; then
+        break
+      fi
+      sleep 5
+    done
+    if [[ ! -s "$tmp_scan" ]]; then
+      rm -f "$tmp_scan"
+      echo "error: could not scan SSH host key for $HOST" >&2
+      exit 1
+    fi
+
+    echo "[ssh] fingerprint for $HOST:"
+    ssh-keygen -lf "$tmp_scan"
+    if [[ "$ACCEPT_HOST_KEY" != "true" ]]; then
+      if [[ ! -t 0 ]]; then
+        rm -f "$tmp_scan"
+        echo "error: host key is unknown and no TTY is available; pass --known-hosts with a trusted entry or --accept-host-key" >&2
+        exit 1
+      fi
+      read -r -p "Trust this SSH host key for $HOST? Type yes: " answer || true
+      if [[ "$answer" != "yes" ]]; then
+        rm -f "$tmp_scan"
+        echo "cancelled: SSH host key was not trusted" >&2
+        exit 1
+      fi
+    fi
+    cat "$tmp_scan" >> "$KNOWN_HOSTS"
+    rm -f "$tmp_scan"
+    echo "[ssh] host key saved to $KNOWN_HOSTS"
+  fi
+
+  SSH_OPTS+=(-o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS")
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --host) HOST="${2:-}"; shift 2 ;;
@@ -45,6 +119,9 @@ while [[ $# -gt 0 ]]; do
     -p|--profile) PROFILE="${2:-balanced}"; shift 2 ;;
     -s|--scope) SCOPE="${2:-}"; shift 2 ;;
     --with-nuclei) NO_NUCLEI=""; shift ;;
+    --known-hosts) KNOWN_HOSTS="${2:-}"; shift 2 ;;
+    --strict-host-key) STRICT_HOST_KEY="${2:-yes}"; shift 2 ;;
+    --accept-host-key) ACCEPT_HOST_KEY="true"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
@@ -66,7 +143,7 @@ rx_require_cmd tar
 
 cd "$ROOT_DIR"
 
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+prepare_ssh_options
 if [[ -n "$KEY" ]]; then
   SSH_OPTS+=(-i "$KEY")
 fi

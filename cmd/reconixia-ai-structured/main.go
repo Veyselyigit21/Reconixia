@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/Veyselyigit21/Reconixia/internal/aianalysis"
+	"github.com/Veyselyigit21/Reconixia/internal/redact"
 	"github.com/Veyselyigit21/Reconixia/internal/safety"
 )
 
@@ -38,7 +39,7 @@ func main() {
 	if err != nil {
 		fatal(err.Error())
 	}
-	result := aianalysis.Local(string(raw))
+	result := aianalysis.Local(redact.String(string(raw)))
 	jsonOut := aianalysis.ToJSON(result)
 
 	outDir := filepath.Dir(*output)

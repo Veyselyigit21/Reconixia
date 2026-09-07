@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "generated_by": "reconixia-ai-structured",
+  "items": [
+    {
+      "title": "Possible exposed token in JavaScript",
+      "asset": "https://static.example.com/app.js",
+      "evidence": "possible_github_token; value redacted",
+      "confidence": "high",
+      "impact": "Potential account or repository access if confirmed",
+      "next_step": "Manually verify token validity without using it beyond program rules",
+      "reportability": "likely_reportable"
+    },
+    {
+      "title": "Possible subdomain takeover candidate",
+      "asset": "cdn.example.com",
+      "evidence": "CNAME points to a known SaaS provider and has no A/AAAA resolution",
+      "confidence": "medium",
+      "impact": "Potential content control over a scoped subdomain if the provider claim is possible",
+      "next_step": "Confirm provider state with non-destructive documentation evidence",
+      "reportability": "needs_manual_validation"
+    }
+  ]
+}

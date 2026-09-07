@@ -43,6 +43,11 @@ Güncel güvenli local recon sürümü `cmd/reconixia-v06` üzerinden ilerler. E
 - `gau --subs` ile Wayback/CommonCrawl tabanlı pasif URL toplayabilir.
 - Admin, login, API, GraphQL, Swagger, OpenAPI, robots ve sitemap gibi ilginç pathleri kontrol eder.
 - HTML ve JS içinden JS dosyası / endpoint adayları çıkarır.
+- JS'den çıkan endpointleri güvenli GET/HEAD/OPTIONS probe ile `public_json`, `auth_required`, `method_not_allowed` gibi triage sınıflarına ayırır.
+- JSON response içinde `email`, `role`, `token`, `userId`, `balance`, `accountId` gibi hassas alan adlarını değerleri kaydetmeden sınıflandırır ve risk skoru üretir.
+- İki sahip olunan test hesabıyla HAR/JSONL tabanlı IDOR/BOLA replay analizi yapar.
+- Browser companion extension ile araştırmacı header'ı ekler, owned-account requestleri toplar ve IDOR JSONL export üretir.
+- Güvenli OAST/callback helper ile destructive olmayan blind interaction kanıtı üretmeye yardımcı olur.
 - API, IDOR ve secret inceleme adaylarını sınıflandırır.
 - CORS ve browser security header analizi yapar.
 - Cookie security analizi yapar.
@@ -74,6 +79,8 @@ go build -o reconixia-report ./cmd/reconixia-report
 go build -o reconixia-augment ./cmd/reconixia-augment
 go build -o reconixia-diff ./cmd/reconixia-diff
 go build -o reconixia-ai-structured ./cmd/reconixia-ai-structured
+go build -o reconixia-idor ./cmd/reconixia-idor
+./reconixia version
 ```
 
 ## İlk kurulum
@@ -127,6 +134,34 @@ Scope ve profil ile:
 ```bash
 ./scripts/full_scan.sh -t hedef.com -p balanced -s examples/scope.example.txt --no-nuclei
 ```
+
+## Otomasyon menüsü
+
+Terminalden ürün gibi kullanmak için:
+
+```bash
+make auto
+```
+
+Menüdeki önerilen akışlar:
+
+```txt
+Quick scan              stealth + resume + nuclei kapalı
+Standard full scan      balanced + resume + HTML rapor
+Bug bounty workflow     full scan + params + 403 + structured AI + isteğe bağlı screenshot/port/provider AI
+Optional modules        mevcut results klasörüne tek tek modül çalıştırma
+Remote / cloud scan     mevcut VPS, DigitalOcean veya Hetzner worker
+```
+
+Güvenli başlangıç için önce `Quick scan`, bounty triage için sonra `Bug bounty workflow` kullan.
+
+Production ortamlarında program istiyorsa araştırmacı header'ı ekle:
+
+```bash
+make full-scan-resume TARGET=hedef.com H1_USER=hackerone_kullanici_adin
+```
+
+Varsayılan header adı `X-HackerOne-Research` değeriyse `H1_USER` olur. Program farklı header adı istiyorsa `RESEARCH_HEADER` ile ezebilirsin.
 
 Bu script şunları sırayla yapar:
 
@@ -191,6 +226,24 @@ results/hedef.com/processed/403_candidates.txt
 
 Detaylar için `docs/OPTIONAL_MODULES.md` dosyasına bak.
 
+## Release kontrolü
+
+Dağıtım öncesi:
+
+```bash
+make release-check
+```
+
+Release artifact üretmek için:
+
+```bash
+make release-artifacts VERSION=0.9.0-rc1
+```
+
+Bu hedef `dist/<version>/` altına platform binary'leri, `SHA256SUMS` ve sistemde `gpg` varsa `SHA256SUMS.asc` detached signature üretir.
+
+Release kapıları için `docs/RELEASE_CHECKLIST.md` dosyasını takip et.
+
 ## Augment: takeover + cookie analizi
 
 Normal recon sonrası mevcut rapora ek analizler ekler:
@@ -216,6 +269,16 @@ Opsiyonel kapatma:
 ./reconixia-diff \
   -old results/hedef.com-old/report.json \
   -new results/hedef.com/report.json
+```
+
+HTML triage diff için:
+
+```bash
+./reconixia-diff \
+  -old results/hedef.com-old/report.json \
+  -new results/hedef.com/report.json \
+  -html \
+  -output results/hedef.com/diff.html
 ```
 
 Şunları listeler:
@@ -278,6 +341,7 @@ results/hedef.com/
 ├── processed/passive_urls.txt
 ├── processed/js_files.txt
 ├── processed/endpoints.txt
+├── processed/endpoint_probes.jsonl
 ├── processed/interesting_paths.txt
 ├── processed/nuclei_safe.txt
 ├── export/targets.txt
@@ -312,13 +376,64 @@ Alternatif olarak doğrudan input/output verebilirsin:
 ## AI analizi
 
 ```bash
+export OPENROUTER_API_KEY=...
 ./reconixia analyze -target hedef.com -provider local
 ./reconixia analyze -target hedef.com -provider openrouter -model deepseek/deepseek-r1
 ./reconixia analyze -target hedef.com -provider openai -model gpt-4o-mini
 ./reconixia analyze -target hedef.com -provider deepseek -model deepseek-reasoner
 ```
 
-AI analizi `results/hedef.com/ai_analysis.md` dosyasına yazılır. Structured JSON için `make structured-ai TARGET=hedef.com` kullanılabilir.
+AI analizi hem `results/hedef.com/ai_analysis.json` hem de `results/hedef.com/ai_analysis.md` dosyasına yazılır. Remote provider kullanırken rapor önce redaction'dan geçer, büyük raporlar chunk'lara ayrılır ve çıktı sabit JSON şemasına parse edilir.
+
+Opsiyonel ayarlar:
+
+```bash
+export RECONIXIA_AI_PROVIDER=openrouter
+export OPENROUTER_MODEL=deepseek/deepseek-r1
+export RECONIXIA_AI_CHUNK_CHARS=24000
+export RECONIXIA_AI_TIMEOUT_SECONDS=90
+```
+
+Yerel keyword tabanlı structured JSON için ayrıca `make structured-ai TARGET=hedef.com` kullanılabilir.
+
+## IDOR / BOLA analizi
+
+Bu modül yalnızca sana ait iki yetkili test hesabıyla kullanılmalıdır. Browser veya Burp üzerinden A hesabının isteklerini HAR olarak dışa aktar, sonra A ve B hesabının auth bilgisini env üzerinden ver:
+
+```bash
+export RECONIXIA_IDOR_AUTH_A='Authorization: Bearer account-a-token'
+export RECONIXIA_IDOR_AUTH_B='Authorization: Bearer account-b-token'
+
+./reconixia-idor \
+  -target whatnot.com \
+  -har whatnot-owned-account.har \
+  -rules examples/program-policies/whatnot.idor-policy.example.json \
+  -h1-user hackerone_kullanici_adin \
+  -rate 2 \
+  -max 50
+```
+
+Alternatif JSONL formatı:
+
+```json
+{"method":"GET","url":"https://api.whatnot.com/api/example/123","headers":{"Accept":"application/json"}}
+```
+
+Varsayılan olarak sadece `GET`, `HEAD` ve `OPTIONS` replay edilir. `POST`, `PUT`, `PATCH`, `DELETE` gibi mutating methodlar ancak `-allow-mutating` ile çalışır ve sadece program kurallarının izin verdiği owned test data üzerinde kullanılmalıdır. Çıktılar `results/<target>/idor_analysis.json` ve `idor_analysis.md` dosyalarına yazılır; response body ve token değerleri saklanmaz.
+
+Programdan programa kural değiştiği için `-rules` ile policy dosyası verebilirsin. Policy içinde target, araştırmacı header'ı, rate/max sınırı, izinli HTTP methodları ve kaçınılacak URL parçaları tanımlanır.
+
+## Browser companion
+
+Chrome/Chromium için lokal extension:
+
+```txt
+browser-extension/reconixia-companion
+```
+
+Kurulum ve kullanım için [docs/BROWSER_EXTENSION.md](docs/BROWSER_EXTENSION.md) dosyasına bak. Extension, program domainlerinde research header ekleyebilir ve DevTools panelinden owned-account API requestlerini JSONL olarak `reconixia-idor` modülüne aktarır.
+
+Reverse shell, persistence veya destructive payload generator bilinçli olarak eklenmez. Güvenli PoC yaklaşımı için [docs/SAFE_POC_HELPERS.md](docs/SAFE_POC_HELPERS.md) dosyasına bak.
 
 ## Hedef formatı
 

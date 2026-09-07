@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -36,7 +37,7 @@ func NormalizeTarget(raw string) (string, bool) {
 		return "", false
 	}
 	if ip := net.ParseIP(raw); ip != nil {
-		if isUnsafeIP(ip) {
+		if !isAllowedIP(ip) {
 			return "", false
 		}
 		return ip.String(), true
@@ -62,7 +63,7 @@ func IsSafeFetchURL(raw string) bool {
 		return false
 	}
 	if ip := net.ParseIP(host); ip != nil {
-		return !isUnsafeIP(ip)
+		return isAllowedIP(ip)
 	}
 	_, ok := NormalizeTarget(host)
 	return ok
@@ -89,7 +90,7 @@ func SafeHTTPClient(timeout time.Duration) *http.Client {
 				return nil, err
 			}
 			for _, a := range ips {
-				if isUnsafeIP(a.IP) {
+				if !isAllowedIP(a.IP) {
 					return nil, &net.AddrError{
 						Err:  "blocked: resolved to unsafe/private IP",
 						Addr: a.IP.String(),
@@ -107,12 +108,15 @@ func SafeHTTPClient(timeout time.Duration) *http.Client {
 }
 
 func isBlockedHostname(host string) bool {
+	if labMode() && (host == "localhost" || host == "localhost.localdomain") {
+		return false
+	}
 	blocked := map[string]bool{
-		"localhost":                 true,
-		"localhost.localdomain":     true,
-		"metadata.google.internal":  true,
-		"169.254.169.254":           true,
-		"100.100.100.200":           true,
+		"localhost":                true,
+		"localhost.localdomain":    true,
+		"metadata.google.internal": true,
+		"169.254.169.254":          true,
+		"100.100.100.200":          true,
 	}
 	if blocked[host] {
 		return true
@@ -141,6 +145,21 @@ func isMetadataIP(ip net.IP) bool {
 		}
 	}
 	return false
+}
+
+func isAllowedIP(ip net.IP) bool {
+	if ip == nil || isMetadataIP(ip) || ip.IsUnspecified() || ip.IsMulticast() {
+		return false
+	}
+	if labMode() {
+		return true
+	}
+	return !isUnsafeIP(ip)
+}
+
+func labMode() bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv("RECONIXIA_LAB_MODE")))
+	return v == "1" || v == "true" || v == "yes"
 }
 
 // ScopeAllowsURL checks whether a URL hostname is allowed by scope rules.

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Veyselyigit21/Reconixia/internal/researchheaders"
 	"github.com/Veyselyigit21/Reconixia/internal/safety"
 )
 
@@ -32,7 +33,7 @@ func AnalyzeURL(client *http.Client, rawURL string, rules []string) []Finding {
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("User-Agent", "Reconixia/1.0 AuthorizedResearch")
+	researchheaders.Apply(req)
 	req.Header.Set("Origin", "https://reconixia.invalid")
 
 	resp, err := client.Do(req)

@@ -8,10 +8,10 @@ type OptionalModules struct {
 }
 
 type Limits struct {
-	MaxHosts        int `json:"max_hosts"`
-	MaxURLs         int `json:"max_urls"`
-	RatePerSecond   int `json:"rate_per_second"`
-	TimeoutSeconds  int `json:"timeout_seconds"`
+	MaxHosts       int `json:"max_hosts"`
+	MaxURLs        int `json:"max_urls"`
+	RatePerSecond  int `json:"rate_per_second"`
+	TimeoutSeconds int `json:"timeout_seconds"`
 }
 
 func Defaults(profile string) Limits {
@@ -26,6 +26,8 @@ func Defaults(profile string) Limits {
 }
 
 func Clip[T any](in []T, max int) []T {
-	if max <= 0 || len(in) <= max { return in }
+	if max <= 0 || len(in) <= max {
+		return in
+	}
 	return in[:max]
 }

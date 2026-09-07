@@ -17,27 +17,8 @@ type Finding struct {
 	Note       string `json:"note"`
 }
 
-type signature struct {
-	Provider string
-	Needle   string
-}
-
-var danglingCNAMESignatures = []signature{
-	{"aws_s3", "amazonaws.com"},
-	{"github_pages", "github.io"},
-	{"heroku", "herokuapp.com"},
-	{"azure", "azurewebsites.net"},
-	{"azure_traffic_manager", "trafficmanager.net"},
-	{"fastly", "fastly.net"},
-	{"netlify", "netlify.app"},
-	{"vercel", "vercel.app"},
-	{"surge", "surge.sh"},
-	{"shopify", "myshopify.com"},
-}
-
 // AnalyzeSubdomains performs a passive DNS/CNAME takeover precursor check.
-// It does not exploit anything; it only flags CNAMEs that point to common SaaS/CDN providers
-// and have no A/AAAA resolution, which may indicate a dangling record needing manual review.
+// It never attempts to claim a resource; it only emits manual review candidates.
 func AnalyzeSubdomains(hosts []string, rules []string) []Finding {
 	var out []Finding
 	seen := map[string]bool{}
@@ -65,8 +46,8 @@ func analyzeHost(host string) []Finding {
 		return nil
 	}
 	cname = strings.TrimSuffix(strings.ToLower(cname), ".")
-	provider := detectProvider(cname)
-	if provider == "" {
+	fp, ok := DetectProvider(cname)
+	if !ok {
 		return nil
 	}
 
@@ -78,8 +59,8 @@ func analyzeHost(host string) []Finding {
 			Type:       "possible_subdomain_takeover",
 			URL:        host,
 			Status:     0,
-			Confidence: "medium",
-			Note:       "CNAME " + cname + " provider=" + provider + " fakat A/AAAA çözümü yok; manuel subdomain takeover kontrolü gerekir",
+			Confidence: fp.Confidence,
+			Note:       "CNAME " + cname + " provider=" + fp.Provider + " evidence=" + fp.Evidence + "; no A/AAAA resolution; manual takeover verification required",
 		}}
 	}
 	return []Finding{{
@@ -87,15 +68,6 @@ func analyzeHost(host string) []Finding {
 		URL:        host,
 		Status:     0,
 		Confidence: "info",
-		Note:       "CNAME " + cname + " provider=" + provider + "; aktif çözüm var, yine de servis sahipliği manuel doğrulanabilir",
+		Note:       "CNAME " + cname + " provider=" + fp.Provider + " evidence=" + fp.Evidence + "; active DNS resolution exists; verify service ownership manually",
 	}}
-}
-
-func detectProvider(cname string) string {
-	for _, s := range danglingCNAMESignatures {
-		if strings.Contains(cname, s.Needle) {
-			return s.Provider
-		}
-	}
-	return ""
 }

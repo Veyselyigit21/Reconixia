@@ -12,6 +12,8 @@ IMAGE="ubuntu-24.04"
 NO_NUCLEI="--no-nuclei"
 SERVER_ID=""
 SERVER_IP=""
+FIREWALL_ID=""
+SSH_CIDR=""
 
 usage() {
   cat <<'EOF'
@@ -27,6 +29,7 @@ Options:
   --location         Hetzner location, default fsn1
   --type             Server type, default cx22
   --image            Image, default ubuntu-24.04
+  --ssh-cidr         CIDR allowed to SSH to the worker. Default: auto-detect public IPv4 /32.
   --with-nuclei      Enable nuclei scan. Default is --no-nuclei for safer first runs.
   -h, --help         Show help
 
@@ -62,11 +65,110 @@ api() {
   fi
 }
 
+normalize_cidr() {
+  python3 - "$1" <<'PY'
+import ipaddress
+import sys
+
+try:
+    print(ipaddress.ip_network(sys.argv[1], strict=False))
+except ValueError as exc:
+    print(f"error: invalid SSH CIDR: {exc}", file=sys.stderr)
+    sys.exit(1)
+PY
+}
+
+resolve_ssh_cidr() {
+  local ip
+  if [[ -n "$SSH_CIDR" ]]; then
+    normalize_cidr "$SSH_CIDR"
+    return
+  fi
+
+  ip="$(curl -fsS --max-time 8 https://api.ipify.org || true)"
+  if [[ -z "$ip" ]]; then
+    echo "error: could not auto-detect public IP; pass --ssh-cidr 1.2.3.4/32" >&2
+    exit 1
+  fi
+  normalize_cidr "$ip/32"
+}
+
+create_firewall() {
+  local ssh_cidr="$1"
+  local payload response
+  payload=$(python3 - "$NAME" "$ssh_cidr" <<'PY'
+import json
+import sys
+
+name = sys.argv[1]
+ssh_cidr = sys.argv[2]
+print(json.dumps({
+    "name": f"{name}-fw",
+    "labels": {"tool": "reconixia", "temporary": "true"},
+    "rules": [
+        {
+            "direction": "in",
+            "protocol": "tcp",
+            "port": "22",
+            "source_ips": [ssh_cidr],
+        },
+        {
+            "direction": "out",
+            "protocol": "tcp",
+            "port": "any",
+            "destination_ips": ["0.0.0.0/0", "::/0"],
+        },
+        {
+            "direction": "out",
+            "protocol": "udp",
+            "port": "any",
+            "destination_ips": ["0.0.0.0/0", "::/0"],
+        },
+        {
+            "direction": "out",
+            "protocol": "icmp",
+            "destination_ips": ["0.0.0.0/0", "::/0"],
+        },
+    ],
+}))
+PY
+)
+  response="$(api POST /firewalls "$payload")"
+  FIREWALL_ID="$(python3 - <<PY
+import json
+print(json.loads('''$response''')['firewall']['id'])
+PY
+)"
+}
+
+wait_deleted() {
+  local path="$1"
+  local label="$2"
+  for _ in $(seq 1 20); do
+    if api GET "$path" >/dev/null 2>&1; then
+      sleep 3
+    else
+      echo "[cleanup] Verified deleted: $label"
+      return
+    fi
+  done
+  echo "[cleanup] Warning: could not verify deletion for $label" >&2
+}
+
 cleanup() {
   if [[ -n "$SERVER_ID" ]]; then
+    local server_id="$SERVER_ID"
     echo "[cleanup] Destroying Hetzner server: $SERVER_ID"
     api DELETE "/servers/$SERVER_ID" >/dev/null 2>&1 || true
+    wait_deleted "/servers/$server_id" "server $server_id"
     SERVER_ID=""
+  fi
+  if [[ -n "$FIREWALL_ID" ]]; then
+    local firewall_id="$FIREWALL_ID"
+    echo "[cleanup] Deleting Hetzner firewall: $FIREWALL_ID"
+    api DELETE "/firewalls/$FIREWALL_ID" >/dev/null 2>&1 || true
+    wait_deleted "/firewalls/$firewall_id" "firewall $firewall_id"
+    FIREWALL_ID=""
   fi
 }
 
@@ -89,6 +191,7 @@ while [[ $# -gt 0 ]]; do
     --location) LOCATION="${2:-fsn1}"; shift 2 ;;
     --type) SERVER_TYPE="${2:-cx22}"; shift 2 ;;
     --image) IMAGE="${2:-ubuntu-24.04}"; shift 2 ;;
+    --ssh-cidr) SSH_CIDR="${2:-}"; shift 2 ;;
     --with-nuclei) NO_NUCLEI=""; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
@@ -114,20 +217,30 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 NAME="reconixia-worker-$(date +%Y%m%d%H%M%S)"
-PAYLOAD=$(python3 - <<PY
+
+SSH_CIDR="$(resolve_ssh_cidr)"
+echo "[1/6] Creating Hetzner firewall for SSH from $SSH_CIDR..."
+create_firewall "$SSH_CIDR"
+echo "Firewall ID: $FIREWALL_ID"
+
+PAYLOAD=$(python3 - "$FIREWALL_ID" <<PY
 import json
+import sys
+
+firewall_id = int(sys.argv[1]) if sys.argv[1].isdigit() else sys.argv[1]
 print(json.dumps({
   "name": "$NAME",
   "server_type": "$SERVER_TYPE",
   "image": "$IMAGE",
   "location": "$LOCATION",
   "ssh_keys": ["$SSH_KEY_NAME"],
+  "firewalls": [{"firewall": firewall_id}],
   "labels": {"tool": "reconixia", "temporary": "true"}
 }))
 PY
 )
 
-echo "[1/5] Creating Hetzner server..."
+echo "[2/6] Creating Hetzner server..."
 CREATE_RESPONSE="$(api POST /servers "$PAYLOAD")"
 SERVER_ID="$(python3 - <<PY
 import json
@@ -136,7 +249,7 @@ PY
 )"
 echo "Server ID: $SERVER_ID"
 
-echo "[2/5] Waiting for public IPv4..."
+echo "[3/6] Waiting for public IPv4..."
 for _ in $(seq 1 60); do
   SERVER_JSON="$(api GET "/servers/$SERVER_ID")"
   SERVER_IP="$(python3 - <<PY
@@ -161,12 +274,13 @@ SSH_ARGS=(--host "$SERVER_IP" --user root -t "$TARGET" -p "$PROFILE")
 if [[ -n "$IDENTITY" ]]; then SSH_ARGS+=(--identity "$IDENTITY"); fi
 if [[ -n "$SCOPE" ]]; then SSH_ARGS+=(-s "$SCOPE"); fi
 if [[ -z "$NO_NUCLEI" ]]; then SSH_ARGS+=(--with-nuclei); fi
+SSH_ARGS+=(--accept-host-key)
 
-echo "[3/5] Running remote worker..."
+echo "[4/6] Running remote worker..."
 chmod +x scripts/remote_existing.sh
 ./scripts/remote_existing.sh "${SSH_ARGS[@]}"
 
-echo "[4/5] Destroying server..."
+echo "[5/6] Destroying server and firewall..."
 cleanup
 
-echo "[5/5] Done."
+echo "[6/6] Done."

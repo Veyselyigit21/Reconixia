@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reconixia Companion</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <div class="heroFrame">
+          <div class="heroTop">
+            <span class="corner">&lt;/&gt;</span>
+            <span class="corner">[ AI ]</span>
+          </div>
+          <div class="mark" aria-hidden="true"><span></span></div>
+          <h1>RECONIXIA</h1>
+          <p>AI bug bounty command console</p>
+          <div class="modules" aria-label="Reconixia modules">
+            <span>RECON</span>
+            <span>IDOR</span>
+            <span>OAST</span>
+            <span>AI</span>
+          </div>
+        </div>
+        <label class="switch" title="Inject research header for matching targets">
+          <input id="enabled" type="checkbox">
+          <span></span>
+        </label>
+      </header>
+
+      <section class="panel">
+        <div class="sectionTitle">
+          <span>PROGRAM</span>
+          <b>Header Injector</b>
+        </div>
+        <label for="preset">Preset</label>
+        <select id="preset">
+          <option value="custom">Custom</option>
+          <option value="whatnot">Whatnot</option>
+          <option value="syfe">Syfe</option>
+        </select>
+
+        <label for="target">Target domains</label>
+        <input id="target" spellcheck="false" placeholder="whatnot.com, api.whatnot.com">
+
+        <label for="h1User">HackerOne username</label>
+        <input id="h1User" spellcheck="false" placeholder="aello">
+
+        <label for="headerName">Research header</label>
+        <input id="headerName" spellcheck="false" placeholder="X-HackerOne-Research">
+      </section>
+
+      <section class="grid panel compact">
+        <div>
+          <label for="rate">Rate</label>
+          <input id="rate" type="number" min="1" max="100" step="1">
+        </div>
+        <div>
+          <label for="maxRequests">Max</label>
+          <input id="maxRequests" type="number" min="1" max="10000" step="1">
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="sectionTitle">
+          <span>BROWSER RECON</span>
+          <b>Secrets / Endpoints / Stack</b>
+        </div>
+        <div class="reconActions">
+          <button id="scanActive" type="button">Scan active tab</button>
+          <button id="copyReconJson" type="button">Copy JSON</button>
+          <button id="downloadReconJson" type="button">Download</button>
+        </div>
+        <section class="grid compactGrid">
+          <label class="check">
+            <input id="scanPaths" type="checkbox">
+            Safe path probe
+          </label>
+          <label>
+            Probe max
+            <input id="probeLimit" type="number" min="1" max="140" step="1">
+          </label>
+        </section>
+        <div id="reconSummary" class="reconSummary">No browser recon yet</div>
+        <textarea id="reconOutput" rows="8" readonly></textarea>
+      </section>
+
+      <section class="panel">
+        <div class="sectionTitle">
+          <span>REPLAY</span>
+          <b>IDOR Command</b>
+        </div>
+        <section class="grid compactGrid">
+          <label>
+            Capture source
+            <select id="captureMode">
+              <option value="jsonl">DevTools JSONL</option>
+              <option value="har">Browser/Burp HAR</option>
+            </select>
+          </label>
+          <label>
+            Capture file
+            <input id="capturePath" spellcheck="false" placeholder="captures/target-account-a-detail.jsonl">
+          </label>
+        </section>
+        <label for="policyPath">Policy file</label>
+        <input id="policyPath" spellcheck="false" placeholder="examples/program-policies/target.idor-policy.json">
+        <label for="command">IDOR command</label>
+        <textarea id="command" rows="5" readonly></textarea>
+        <button id="copyCommand" type="button">Copy command</button>
+      </section>
+
+      <section class="panel">
+        <div class="sectionTitle">
+          <span>PAYLOAD LAB</span>
+          <b>Safe Callback Helper</b>
+        </div>
+        <label for="oastDomain">Safe callback domain</label>
+        <input id="oastDomain" spellcheck="false" placeholder="aello.interact.sh">
+
+        <label for="callbackPayloads">Callback helpers</label>
+        <textarea id="callbackPayloads" rows="6" readonly></textarea>
+        <button id="copyCallbacks" type="button">Copy callbacks</button>
+      </section>
+
+      <footer id="status">Ready</footer>
+    </main>
+    <script src="recon_scan.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
