@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+Genişletilmiş keşif modülleri (varsayılan güvenli posture korunarak).
+
+- Pasif subdomain kaynakları genişletildi: `crt.sh` certificate transparency + opsiyonel `assetfinder`, scope/safety filtresinden geçirilerek `subfinder` sonuçlarıyla birleştiriliyor (`-no-subenum` ile kapatılır).
+- Cloud object storage exposure tespiti eklendi: S3/GCS/Azure/DO Spaces referansları çıkarılıp yalnızca okuma yapan isteklerle public-listing / dangling-bucket olarak sınıflandırılıyor (`-no-buckets` ile kapatılır).
+- Tech priority özeti eklendi: `httpx` JSON teknoloji parmak izleri risk sırasına dizilip rapora (`report.md`/`report.json`) ekleniyor.
+- Opsiyonel `-prune-dead`: pasif URL'ler `httpx` ile doğrulanıp ölü/404/5xx olanlar eleniyor.
+- Opsiyonel `-katana`: aktif derin crawl ile ek URL/endpoint keşfi (trafik ürettiği için opt-in).
+- Opsiyonel `-arjun`: gizli parametre keşfi; sonuçlar `discovered_params.txt` ve `discovered_parameter` bulguları olarak kaydediliyor (opt-in).
+- Opsiyonel `-xss`: `dalfox` ile parametreli URL'lerde reflected/DOM XSS tespiti; scope/safety gate, rate-limit, research header, yalnızca tespit amaçlı varsayılan payloadlar (opt-in, aktif).
+- Opsiyonel `-dast`: `nuclei -dast` fuzzing/DAST şablonları (opt-in, aktif). `nuclei()` imzası DAST bayrağını alacak şekilde güncellendi.
+- Güvenlik sınırı korundu: reverse shell / persistence / destructive-silahlandırılmış payload üretimi hâlâ kapsam dışı; yeni modüller tespit/fuzzing ile sınırlı.
+- `httpx` artık JSON çıktısı üretip `processed/httpx_detailed.jsonl` dosyasına yazıyor; canlı host listesi buradan türetiliyor.
+- `install_tools.sh` ve `doctor` yeni opsiyonel araçları (assetfinder, katana, arjun) kapsayacak şekilde güncellendi.
+- Yeni `techrank` ve `cloudbuckets` paketleri için birim testleri eklendi.
+
 ## 0.9.0-rc1 - 2026-05-11
 
 Release-candidate hardening pass for Reconixia.

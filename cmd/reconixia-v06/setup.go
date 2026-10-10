@@ -154,6 +154,14 @@ func doctor() {
 			fmt.Println("[YOK]", b)
 		}
 	}
+	// Opsiyonel araçlar: yoklukları taramayı durdurmaz, ilgili modül atlanır.
+	for _, b := range []string{"assetfinder", "katana", "arjun", "dalfox"} {
+		if _, err := exec.LookPath(b); err == nil {
+			fmt.Println("[OK]", b, "(opsiyonel)")
+		} else {
+			fmt.Println("[YOK]", b, "(opsiyonel)")
+		}
+	}
 	for _, e := range []string{"OPENROUTER_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"} {
 		if os.Getenv(e) != "" {
 			fmt.Println("[OK]", e)

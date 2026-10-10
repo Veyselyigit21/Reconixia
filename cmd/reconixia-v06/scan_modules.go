@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -159,31 +160,47 @@ func subfinder(target, out string) ([]string, error) {
 	return uniq(lines), nil
 }
 
-func httpxLive(in, out string, p Profile) ([]string, error) {
+// httpxLive probes hosts and writes httpx JSONL (url + tech fingerprints) to
+// detailedPath. It returns the bare live URL list; the JSONL is kept so the
+// tech-priority stage can rank fingerprints without a second probe.
+func httpxLive(in, detailedPath string, p Profile) ([]string, error) {
 	if _, err := exec.LookPath("httpx"); err != nil {
 		return nil, fmt.Errorf("httpx yok; internal fallback kullanılacak")
 	}
 	cmd := exec.Command("httpx",
 		"-l", in,
 		"-silent",
+		"-json",
 		"-follow-host-redirects",
 		"-status-code",
 		"-title",
 		"-tech-detect",
 		"-rate-limit", fmt.Sprint(p.Rate),
 		"-threads", fmt.Sprint(p.Threads),
-		"-o", out,
+		"-o", detailedPath,
 	)
-	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}
-	lines, _ := readLines(out)
-	return firstURL(lines), nil
+	lines, _ := readLines(detailedPath)
+	out := []string{}
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "{") {
+			continue
+		}
+		var hl struct {
+			URL string `json:"url"`
+		}
+		if json.Unmarshal([]byte(line), &hl) == nil && hl.URL != "" {
+			out = append(out, hl.URL)
+		}
+	}
+	return uniq(out), nil
 }
 
-func nuclei(in, out string, p Profile, severity string) error {
+func nuclei(in, out string, p Profile, severity string, dast bool) error {
 	if _, err := exec.LookPath("nuclei"); err != nil {
 		return fmt.Errorf("nuclei yok; atlandı")
 	}
@@ -193,6 +210,10 @@ func nuclei(in, out string, p Profile, severity string) error {
 		"-rate-limit", fmt.Sprint(p.Rate),
 		"-silent",
 		"-o", out,
+	}
+	if dast {
+		// -dast: yalnızca fuzzing/DAST şablonlarını çalıştırır (aktif test).
+		args = append(args, "-dast")
 	}
 	if templates := nucleiTemplatesDir(); templates != "" {
 		args = append(args, "-t", templates)

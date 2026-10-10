@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Veyselyigit21/Reconixia/internal/safety"
+	"github.com/Veyselyigit21/Reconixia/internal/techrank"
 )
 
 // ── Tipler ──────────────────────────────────────────────────────────────────
@@ -58,18 +59,20 @@ type SensitiveField struct {
 }
 
 type Report struct {
-	Target         string          `json:"target"`
-	Profile        Profile         `json:"profile"`
-	GeneratedAt    string          `json:"generated_at"`
-	Subdomains     []string        `json:"subdomains"`
-	LiveHosts      []string        `json:"live_hosts"`
-	PassiveURLs    []string        `json:"passive_urls"`
-	JSFiles        []string        `json:"js_files"`
-	Endpoints      []string        `json:"endpoints"`
-	EndpointProbes []EndpointProbe `json:"endpoint_probes,omitempty"`
-	Findings       []Finding       `json:"findings"`
-	Warnings       []string        `json:"warnings"`
-	ExportTarget   string          `json:"export_target"`
+	Target           string          `json:"target"`
+	Profile          Profile         `json:"profile"`
+	GeneratedAt      string          `json:"generated_at"`
+	Subdomains       []string        `json:"subdomains"`
+	LiveHosts        []string        `json:"live_hosts"`
+	PassiveURLs      []string        `json:"passive_urls"`
+	JSFiles          []string        `json:"js_files"`
+	Endpoints        []string        `json:"endpoints"`
+	EndpointProbes   []EndpointProbe `json:"endpoint_probes,omitempty"`
+	Findings         []Finding       `json:"findings"`
+	TechSummary      []techrank.Item `json:"tech_summary,omitempty"`
+	DiscoveredParams []string        `json:"discovered_params,omitempty"`
+	Warnings         []string        `json:"warnings"`
+	ExportTarget     string          `json:"export_target"`
 }
 
 type Options struct {
@@ -85,6 +88,13 @@ type Options struct {
 	Resume      bool
 	ResetResume bool
 	LabMode     bool
+	NoSubenum   bool
+	NoBuckets   bool
+	PruneDead   bool
+	Katana      bool
+	Arjun       bool
+	XSS         bool
+	DAST        bool
 }
 
 type limiter struct{ tick <-chan time.Time }
@@ -129,6 +139,7 @@ func usage() {
 	fmt.Println("  reconixia doctor")
 	fmt.Println("  reconixia version")
 	fmt.Println("  reconixia run -target hedef.com [-scope scope.txt] [-profile balanced] [-seed-url http://localhost:3000] [-h1-user username] [-resume] [-no-gau] [-no-headers] [-lab-mode]")
+	fmt.Println("      [-no-subenum] [-no-buckets] [-prune-dead] [-katana] [-arjun] [-xss] [-dast]")
 	fmt.Println("  reconixia analyze -target hedef.com [-provider local|openrouter|openai|deepseek] [-model model] [-lab-mode]")
 }
 
@@ -281,6 +292,13 @@ func cmdRun(args []string) {
 	resume := fs.Bool("resume", false, "reuse completed Go checkpoint steps")
 	resetResume := fs.Bool("reset-resume", false, "delete Go checkpoint before running")
 	labMode := fs.Bool("lab-mode", false, "allow loopback/private IP targets for authorized local lab testing only")
+	noSubenum := fs.Bool("no-subenum", false, "crt.sh/assetfinder pasif subdomain kaynaklarını atla")
+	noBuckets := fs.Bool("no-buckets", false, "cloud bucket exposure tespitini atla")
+	pruneDead := fs.Bool("prune-dead", false, "pasif URL'leri httpx ile doğrulayıp ölü/404 olanları ele")
+	katana := fs.Bool("katana", false, "katana ile aktif derin crawl (hedefe trafik üretir)")
+	arjun := fs.Bool("arjun", false, "arjun ile gizli parametre keşfi (hedefe trafik üretir)")
+	xss := fs.Bool("xss", false, "dalfox ile aktif XSS tespiti (parametreli URL'lere probe payload gönderir)")
+	dast := fs.Bool("dast", false, "nuclei -dast fuzzing (aktif; -no-nuclei ile birlikte kullanılamaz)")
 	h1User := fs.String("h1-user", "", "HackerOne username for X-HackerOne-Research header")
 	researchHeader := fs.String("research-header", "", "custom research attribution header name")
 	_ = fs.Parse(args)
@@ -316,6 +334,13 @@ func cmdRun(args []string) {
 		Resume:      *resume,
 		ResetResume: *resetResume,
 		LabMode:     *labMode,
+		NoSubenum:   *noSubenum,
+		NoBuckets:   *noBuckets,
+		PruneDead:   *pruneDead,
+		Katana:      *katana,
+		Arjun:       *arjun,
+		XSS:         *xss,
+		DAST:        *dast,
 	})
 	if err != nil {
 		fatal(err.Error())

@@ -232,6 +232,18 @@ func writeReport(ws string, r Report) {
 				p.URL, p.GETStatus, p.HEADStatus, p.OPTIONSStatus, p.Classification, risk, p.Size, p.Note))
 		}
 	}
+	if len(r.TechSummary) > 0 {
+		b.WriteString("\n## Tech Priority\n\n")
+		for _, t := range r.TechSummary {
+			b.WriteString(fmt.Sprintf("- `%s` risk:%s hosts:%d\n", t.Name, t.Risk, t.Hosts))
+		}
+	}
+	if len(r.DiscoveredParams) > 0 {
+		b.WriteString("\n## Discovered Parameters\n\n")
+		for _, p := range r.DiscoveredParams {
+			b.WriteString("- `" + p + "`\n")
+		}
+	}
 	b.WriteString("\n## Oncelikli Bulgular\n\n")
 	for _, f := range r.Findings {
 		b.WriteString(fmt.Sprintf("- `%s` [%d] %s / %s - %s\n", f.URL, f.Status, f.Type, f.Confidence, f.Note))
@@ -265,6 +277,10 @@ func redactReport(r Report) Report {
 	for i := range r.Findings {
 		r.Findings[i].URL = redact.String(r.Findings[i].URL)
 		r.Findings[i].Note = redact.String(r.Findings[i].Note)
+	}
+	r.DiscoveredParams = redact.Strings(r.DiscoveredParams)
+	for i := range r.TechSummary {
+		r.TechSummary[i].Examples = redact.Strings(r.TechSummary[i].Examples)
 	}
 	return r
 }

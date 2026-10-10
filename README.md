@@ -39,6 +39,14 @@ Güncel güvenli local recon sürümü `cmd/reconixia-v06` üzerinden ilerler. E
 - Private, loopback, link-local, multicast ve metadata IP hedeflerini reddeder.
 - Scope allow/deny kurallarını uygular.
 - `subfinder`, `httpx`, `nuclei` ve opsiyonel `gau` araçlarını tek merkezden çalıştırır.
+- `subfinder`e ek olarak `crt.sh` (certificate transparency) ve opsiyonel `assetfinder` ile pasif subdomain kapsamını genişletir.
+- Opsiyonel `-prune-dead` ile pasif URL'leri `httpx` üzerinden doğrulayıp ölü/404 olanları rapordan eler.
+- Opsiyonel `-katana` ile aktif derin crawl yaparak `gau`'nun kaçırdığı URL/endpoint yüzeylerini bulur.
+- Opsiyonel `-arjun` ile gizli GET/POST parametrelerini keşfeder (yetkili hedeflerde).
+- Opsiyonel `-xss` ile `dalfox` kullanarak parametreli URL'lerde reflected/DOM XSS tespiti yapar (tespit amaçlı varsayılan payloadlar; custom/silahlandırılmış payload yok).
+- Opsiyonel `-dast` ile `nuclei -dast` fuzzing/DAST şablonlarını çalıştırır (aktif test).
+- Cloud object storage (S3/GCS/Azure/DO Spaces) referanslarını tespit eder ve yalnızca okuma yapan isteklerle public listing / dangling bucket durumunu sınıflandırır.
+- `httpx` teknoloji parmak izlerini risk önceliğine göre (`Tech Priority`) sıralayıp rapora ekler.
 - Canlı HTTP/HTTPS servisleri ayıklar.
 - `gau --subs` ile Wayback/CommonCrawl tabanlı pasif URL toplayabilir.
 - Admin, login, API, GraphQL, Swagger, OpenAPI, robots ve sitemap gibi ilginç pathleri kontrol eder.
@@ -203,6 +211,31 @@ make structured-ai TARGET=hedef.com
 ./reconixia run -target hedef.com -no-headers
 ./reconixia run -target hedef.com -no-nuclei
 ```
+
+Genişletilmiş keşif bayrakları:
+
+```bash
+./reconixia run -target hedef.com -no-subenum        # crt.sh/assetfinder pasif kaynaklarını kapat
+./reconixia run -target hedef.com -no-buckets        # cloud bucket exposure analizini kapat
+./reconixia run -target hedef.com -prune-dead        # pasif URL'leri httpx ile doğrula, ölüleri ele
+./reconixia run -target hedef.com -katana            # aktif derin crawl (hedefe trafik üretir)
+./reconixia run -target hedef.com -arjun             # gizli parametre keşfi (hedefe trafik üretir)
+./reconixia run -target hedef.com -xss               # dalfox ile aktif XSS tespiti (parametreli URL'ler)
+./reconixia run -target hedef.com -dast              # nuclei -dast fuzzing (aktif)
+```
+
+Varsayılan davranış:
+
+```txt
+crt.sh + assetfinder pasif subdomain       : açık (-no-subenum ile kapatılır)
+cloud bucket exposure                      : açık (-no-buckets ile kapatılır)
+tech priority özeti                        : açık (ek maliyet yok, lokal)
+ölü URL budama / katana / arjun / xss / dast : kapalı (opt-in; aktif trafik ürettikleri için bayrakla açılır)
+```
+
+### Aktif test ve güvenlik sınırı
+
+`-xss` (dalfox) ve `-dast` (nuclei) **aktif** modüllerdir: hedefe probe/fuzzing payloadları gönderirler. Bu nedenle opt-in'dir, scope + SSRF filtresinden geçer, rate-limit ve research header uygular, yalnızca tespit amaçlı varsayılan payloadları kullanır. Yalnızca **test etmeye yetkili** (programın scope'undaki) hedeflerde kullan. Reconixia bilinçli olarak **reverse shell, persistence ve destructive/silahlandırılmış payload üretmez**; bu modüller de bu sınırın içindedir.
 
 ## Opsiyonel modüller
 

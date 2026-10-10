@@ -7,12 +7,16 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/Veyselyigit21/Reconixia/internal/checkpoint"
+	"github.com/Veyselyigit21/Reconixia/internal/cloudbuckets"
 	"github.com/Veyselyigit21/Reconixia/internal/safety"
+	"github.com/Veyselyigit21/Reconixia/internal/subenum"
 	"github.com/Veyselyigit21/Reconixia/internal/takeover"
+	"github.com/Veyselyigit21/Reconixia/internal/techrank"
 	"github.com/Veyselyigit21/Reconixia/internal/workspace"
 )
 
@@ -64,8 +68,13 @@ func runResumable(ctx context.Context, o Options, target string, p Profile) (*Re
 
 	subdomainsPath := filepath.Join(ws, "raw", "subdomains.txt")
 	livePath := filepath.Join(ws, "processed", "live_hosts.txt")
+	httpxDetailedPath := filepath.Join(ws, "processed", "httpx_detailed.jsonl")
 	targetsPath := filepath.Join(ws, "export", "targets.txt")
 	passivePath := filepath.Join(ws, "processed", "passive_urls.txt")
+	discoveredParamsPath := filepath.Join(ws, "processed", "discovered_params.txt")
+	bucketFindingsPath := filepath.Join(ws, "processed", "findings_buckets.txt")
+	paramFindingsPath := filepath.Join(ws, "processed", "findings_params.txt")
+	xssFindingsPath := filepath.Join(ws, "processed", "findings_xss.txt")
 	jsPath := filepath.Join(ws, "processed", "js_files.txt")
 	endpointsPath := filepath.Join(ws, "processed", "endpoints.txt")
 	endpointProbesPath := filepath.Join(ws, "processed", "endpoint_probes.jsonl")
@@ -88,6 +97,19 @@ func runResumable(ctx context.Context, o Options, target string, p Profile) (*Re
 		if err != nil {
 			warnings = append(warnings, err.Error())
 		}
+		if !o.NoSubenum {
+			sr := subenum.Passive(ctx, target, scopeRules, 25*time.Second)
+			subs = append(subs, sr.Hosts...)
+			warnings = append(warnings, sr.Warnings...)
+			if len(sr.Sources) > 0 {
+				parts := []string{}
+				for k, v := range sr.Sources {
+					parts = append(parts, fmt.Sprintf("%s=%d", k, v))
+				}
+				sort.Strings(parts)
+				log.Println("    [+] pasif subdomain kaynakları:", strings.Join(parts, " "))
+			}
+		}
 		if len(subs) == 0 {
 			subs = []string{target}
 		}
@@ -105,7 +127,7 @@ func runResumable(ctx context.Context, o Options, target string, p Profile) (*Re
 		writeLines(livePath, live)
 		markCheckpoint(checkpointPath, &ckpt, "httpx", &warnings)
 	} else {
-		live, err = httpxLive(subdomainsPath, livePath, p)
+		live, err = httpxLive(subdomainsPath, httpxDetailedPath, p)
 		if err != nil {
 			warnings = append(warnings, err.Error())
 		}
@@ -130,6 +152,22 @@ func runResumable(ctx context.Context, o Options, target string, p Profile) (*Re
 		passive = passiveURLs(ctx, target, live, p, scopeRules, noGAU, &warnings, client)
 		writeLines(passivePath, passive)
 		markCheckpoint(checkpointPath, &ckpt, "passive", &warnings)
+	}
+
+	if o.PruneDead && !checkpoint.IsDone(ckpt, "prune_dead") {
+		log.Println("[+] Ölü URL budama (httpx doğrulama)")
+		passive = pruneDeadURLs(ctx, passive, p, scopeRules, client, &warnings)
+		writeLines(passivePath, passive)
+		markCheckpoint(checkpointPath, &ckpt, "prune_dead", &warnings)
+	}
+
+	if o.Katana && !checkpoint.IsDone(ckpt, "katana") {
+		log.Println("[+] Katana derin crawl")
+		if kurls := runKatana(ctx, targetsPath, p, scopeRules, &warnings); len(kurls) > 0 {
+			passive = uniq(append(passive, kurls...))
+			writeLines(passivePath, passive)
+		}
+		markCheckpoint(checkpointPath, &ckpt, "katana", &warnings)
 	}
 
 	log.Println("[4/10] JS ve endpoint cikarimi")
@@ -193,8 +231,13 @@ func runResumable(ctx context.Context, o Options, target string, p Profile) (*Re
 	} else {
 		if o.NoNuclei {
 			warnings = append(warnings, "nuclei kullanici tercihiyle atlandi")
-		} else if err := nuclei(targetsPath, nucleiPath, p, o.Severity); err != nil {
-			warnings = append(warnings, err.Error())
+		} else {
+			if o.DAST {
+				log.Println("    [+] nuclei DAST fuzzing etkin")
+			}
+			if err := nuclei(targetsPath, nucleiPath, p, o.Severity, o.DAST); err != nil {
+				warnings = append(warnings, err.Error())
+			}
 		}
 		markCheckpoint(checkpointPath, &ckpt, "nuclei", &warnings)
 	}
@@ -209,20 +252,80 @@ func runResumable(ctx context.Context, o Options, target string, p Profile) (*Re
 		markCheckpoint(checkpointPath, &ckpt, "takeover", &warnings)
 	}
 
+	log.Println("[+] Cloud bucket exposure analizi")
+	if cached, ok := resumeFindings(true, ckpt, "buckets", bucketFindingsPath, &warnings); ok {
+		findings = append(findings, cached...)
+	} else {
+		bucketFindings := []Finding{}
+		if o.NoBuckets {
+			warnings = append(warnings, "cloud bucket analizi kullanıcı tercihiyle atlandı")
+		} else {
+			for _, bf := range cloudbuckets.Scan(ctx, p.Timeout, 0, live, passive, endpoints, js) {
+				bucketFindings = append(bucketFindings, Finding{
+					Type:       bf.Type,
+					URL:        bf.URL,
+					Status:     bf.Status,
+					Confidence: bf.Confidence,
+					Note:       bf.Note,
+				})
+			}
+		}
+		writeFindings(bucketFindingsPath, bucketFindings)
+		findings = append(findings, bucketFindings...)
+		markCheckpoint(checkpointPath, &ckpt, "buckets", &warnings)
+	}
+
+	if o.XSS {
+		if cached, ok := resumeFindings(true, ckpt, "xss", xssFindingsPath, &warnings); ok {
+			findings = append(findings, cached...)
+		} else {
+			log.Println("[+] Dalfox XSS tespiti")
+			xssFindings := runDalfox(ctx, passive, p, scopeRules, &warnings)
+			writeFindings(xssFindingsPath, xssFindings)
+			findings = append(findings, xssFindings...)
+			markCheckpoint(checkpointPath, &ckpt, "xss", &warnings)
+		}
+	}
+
+	var discoveredParams []string
+	if o.Arjun {
+		if checkpoint.IsDone(ckpt, "arjun") {
+			discoveredParams, _ = readLines(discoveredParamsPath)
+			if pf, perr := readFindings(paramFindingsPath); perr == nil {
+				findings = append(findings, pf...)
+			}
+		} else {
+			log.Println("[+] Arjun gizli parametre keşfi")
+			flat, paramFindings := runArjun(ctx, live, p, scopeRules, arjunHostCap(p.Name), &warnings)
+			discoveredParams = flat
+			writeLines(discoveredParamsPath, flat)
+			writeFindings(paramFindingsPath, paramFindings)
+			findings = append(findings, paramFindings...)
+			markCheckpoint(checkpointPath, &ckpt, "arjun", &warnings)
+		}
+	}
+
+	var techSummary []techrank.Item
+	if detailedLines, derr := readLines(httpxDetailedPath); derr == nil && len(detailedLines) > 0 {
+		techSummary = techrank.Rank(detailedLines)
+	}
+
 	log.Println("[10/10] Rapor")
 	report := &Report{
-		Target:         target,
-		Profile:        p,
-		GeneratedAt:    time.Now().Format(time.RFC3339),
-		Subdomains:     subs,
-		LiveHosts:      live,
-		PassiveURLs:    passive,
-		JSFiles:        js,
-		Endpoints:      endpoints,
-		EndpointProbes: endpointProbes,
-		Findings:       deduplicateFindings(findings),
-		Warnings:       warnings,
-		ExportTarget:   targetsPath,
+		Target:           target,
+		Profile:          p,
+		GeneratedAt:      time.Now().Format(time.RFC3339),
+		Subdomains:       subs,
+		LiveHosts:        live,
+		PassiveURLs:      passive,
+		JSFiles:          js,
+		Endpoints:        endpoints,
+		EndpointProbes:   endpointProbes,
+		Findings:         deduplicateFindings(findings),
+		TechSummary:      techSummary,
+		DiscoveredParams: discoveredParams,
+		Warnings:         warnings,
+		ExportTarget:     targetsPath,
 	}
 	writeReport(ws, *report)
 	markCheckpoint(checkpointPath, &ckpt, "report", &warnings)
