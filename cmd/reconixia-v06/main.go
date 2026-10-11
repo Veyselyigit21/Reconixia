@@ -90,11 +90,13 @@ type Options struct {
 	LabMode     bool
 	NoSubenum   bool
 	NoBuckets   bool
+	NoWebChecks bool
 	PruneDead   bool
 	Katana      bool
 	Arjun       bool
 	XSS         bool
 	DAST        bool
+	AI          bool
 }
 
 type limiter struct{ tick <-chan time.Time }
@@ -139,7 +141,7 @@ func usage() {
 	fmt.Println("  reconixia doctor")
 	fmt.Println("  reconixia version")
 	fmt.Println("  reconixia run -target hedef.com [-scope scope.txt] [-profile balanced] [-seed-url http://localhost:3000] [-h1-user username] [-resume] [-no-gau] [-no-headers] [-lab-mode]")
-	fmt.Println("      [-no-subenum] [-no-buckets] [-prune-dead] [-katana] [-arjun] [-xss] [-dast]")
+	fmt.Println("      [-no-subenum] [-no-buckets] [-no-webchecks] [-prune-dead] [-katana] [-arjun] [-xss] [-dast] [-ai]")
 	fmt.Println("  reconixia analyze -target hedef.com [-provider local|openrouter|openai|deepseek] [-model model] [-lab-mode]")
 }
 
@@ -294,11 +296,13 @@ func cmdRun(args []string) {
 	labMode := fs.Bool("lab-mode", false, "allow loopback/private IP targets for authorized local lab testing only")
 	noSubenum := fs.Bool("no-subenum", false, "crt.sh/assetfinder pasif subdomain kaynaklarını atla")
 	noBuckets := fs.Bool("no-buckets", false, "cloud bucket exposure tespitini atla")
+	noWebChecks := fs.Bool("no-webchecks", false, "web checks (metod/redirect/host/hassas dosya/param riski) atla")
 	pruneDead := fs.Bool("prune-dead", false, "pasif URL'leri httpx ile doğrulayıp ölü/404 olanları ele")
 	katana := fs.Bool("katana", false, "katana ile aktif derin crawl (hedefe trafik üretir)")
 	arjun := fs.Bool("arjun", false, "arjun ile gizli parametre keşfi (hedefe trafik üretir)")
 	xss := fs.Bool("xss", false, "dalfox ile aktif XSS tespiti (parametreli URL'lere probe payload gönderir)")
 	dast := fs.Bool("dast", false, "nuclei -dast fuzzing (aktif; -no-nuclei ile birlikte kullanılamaz)")
+	aiTriage := fs.Bool("ai", false, "tarama bitince otomatik AI triyaj çalıştır (RECONIXIA_AI_PROVIDER)")
 	h1User := fs.String("h1-user", "", "HackerOne username for X-HackerOne-Research header")
 	researchHeader := fs.String("research-header", "", "custom research attribution header name")
 	_ = fs.Parse(args)
@@ -336,11 +340,13 @@ func cmdRun(args []string) {
 		LabMode:     *labMode,
 		NoSubenum:   *noSubenum,
 		NoBuckets:   *noBuckets,
+		NoWebChecks: *noWebChecks,
 		PruneDead:   *pruneDead,
 		Katana:      *katana,
 		Arjun:       *arjun,
 		XSS:         *xss,
 		DAST:        *dast,
+		AI:          *aiTriage,
 	})
 	if err != nil {
 		fatal(err.Error())

@@ -17,6 +17,7 @@ import (
 	"github.com/Veyselyigit21/Reconixia/internal/subenum"
 	"github.com/Veyselyigit21/Reconixia/internal/takeover"
 	"github.com/Veyselyigit21/Reconixia/internal/techrank"
+	"github.com/Veyselyigit21/Reconixia/internal/webchecks"
 	"github.com/Veyselyigit21/Reconixia/internal/workspace"
 )
 
@@ -75,6 +76,7 @@ func runResumable(ctx context.Context, o Options, target string, p Profile) (*Re
 	bucketFindingsPath := filepath.Join(ws, "processed", "findings_buckets.txt")
 	paramFindingsPath := filepath.Join(ws, "processed", "findings_params.txt")
 	xssFindingsPath := filepath.Join(ws, "processed", "findings_xss.txt")
+	webchecksFindingsPath := filepath.Join(ws, "processed", "findings_webchecks.txt")
 	jsPath := filepath.Join(ws, "processed", "js_files.txt")
 	endpointsPath := filepath.Join(ws, "processed", "endpoints.txt")
 	endpointProbesPath := filepath.Join(ws, "processed", "endpoint_probes.jsonl")
@@ -275,6 +277,26 @@ func runResumable(ctx context.Context, o Options, target string, p Profile) (*Re
 		markCheckpoint(checkpointPath, &ckpt, "buckets", &warnings)
 	}
 
+	log.Println("[+] Web checks (metod / redirect / host / hassas dosya / param riski)")
+	if cached, ok := resumeFindings(true, ckpt, "webchecks", webchecksFindingsPath, &warnings); ok {
+		findings = append(findings, cached...)
+	} else {
+		wcf := []Finding{}
+		if o.NoWebChecks {
+			warnings = append(warnings, "web checks kullanıcı tercihiyle atlandı")
+		} else {
+			paramInputs := append(append([]string{}, passive...), endpoints...)
+			wcf = append(wcf, webToFindings(webchecks.ParamRiskCandidates(paramInputs))...)
+			wcf = append(wcf, webToFindings(webchecks.DangerousMethods(ctx, client, live, scopeRules))...)
+			wcf = append(wcf, webToFindings(webchecks.OpenRedirect(ctx, client, passive, scopeRules, 60))...)
+			wcf = append(wcf, webToFindings(webchecks.HostHeaderInjection(ctx, client, live, scopeRules))...)
+			wcf = append(wcf, webToFindings(webchecks.SensitiveFiles(ctx, client, live, scopeRules))...)
+		}
+		writeFindings(webchecksFindingsPath, wcf)
+		findings = append(findings, wcf...)
+		markCheckpoint(checkpointPath, &ckpt, "webchecks", &warnings)
+	}
+
 	if o.XSS {
 		if cached, ok := resumeFindings(true, ckpt, "xss", xssFindingsPath, &warnings); ok {
 			findings = append(findings, cached...)
@@ -329,6 +351,15 @@ func runResumable(ctx context.Context, o Options, target string, p Profile) (*Re
 	}
 	writeReport(ws, *report)
 	markCheckpoint(checkpointPath, &ckpt, "report", &warnings)
+
+	if o.AI {
+		log.Println("[+] AI triyaj (otomatik)")
+		provider := getenv("RECONIXIA_AI_PROVIDER", "local")
+		if err := analyze(target, provider, ""); err != nil {
+			log.Printf("[WARN] otomatik AI analizi basarisiz: %v", err)
+		}
+	}
+
 	log.Println("Tamamlandi:", ws)
 	return report, nil
 }

@@ -12,7 +12,17 @@ import (
 
 	"github.com/Veyselyigit21/Reconixia/internal/researchheaders"
 	"github.com/Veyselyigit21/Reconixia/internal/safety"
+	"github.com/Veyselyigit21/Reconixia/internal/webchecks"
 )
+
+// webToFindings converts webchecks.Finding values into the host Finding type.
+func webToFindings(in []webchecks.Finding) []Finding {
+	out := make([]Finding, 0, len(in))
+	for _, f := range in {
+		out = append(out, Finding{Type: f.Type, URL: f.URL, Status: f.Status, Confidence: f.Confidence, Note: f.Note})
+	}
+	return out
+}
 
 // researchHeaderArg returns a "Name: value" header string for external tools
 // (katana/arjun) when a research attribution header is configured, else "".

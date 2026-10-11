@@ -47,6 +47,8 @@ Güncel güvenli local recon sürümü `cmd/reconixia-v06` üzerinden ilerler. E
 - Opsiyonel `-dast` ile `nuclei -dast` fuzzing/DAST şablonlarını çalıştırır (aktif test).
 - Cloud object storage (S3/GCS/Azure/DO Spaces) referanslarını tespit eder ve yalnızca okuma yapan isteklerle public listing / dangling bucket durumunu sınıflandırır.
 - `httpx` teknoloji parmak izlerini risk önceliğine göre (`Tech Priority`) sıralayıp rapora ekler.
+- Web checks (varsayılan açık, hafif): sürüm bilgisi ifşası (`Server`/`X-Powered-By`), COOP/Permissions-Policy eksikliği, derinlemesine CSP zayıflıkları (wildcard/object-src/frame-ancestors), tehlikeli HTTP metodları (TRACE/PUT/DELETE, XST), open redirect, host header yansıması, ve içerik imzasıyla doğrulanmış hassas dosya ifşası (`.git`, `.env`, `web.config`, yedek/DB).
+- Toplanan URL parametrelerini SSRF / LFI / open-redirect sink adaylarına göre (pasif) etiketler.
 - Canlı HTTP/HTTPS servisleri ayıklar.
 - `gau --subs` ile Wayback/CommonCrawl tabanlı pasif URL toplayabilir.
 - Admin, login, API, GraphQL, Swagger, OpenAPI, robots ve sitemap gibi ilginç pathleri kontrol eder.
@@ -217,12 +219,16 @@ Genişletilmiş keşif bayrakları:
 ```bash
 ./reconixia run -target hedef.com -no-subenum        # crt.sh/assetfinder pasif kaynaklarını kapat
 ./reconixia run -target hedef.com -no-buckets        # cloud bucket exposure analizini kapat
+./reconixia run -target hedef.com -no-webchecks      # web checks (metod/redirect/host/dosya/param) kapat
 ./reconixia run -target hedef.com -prune-dead        # pasif URL'leri httpx ile doğrula, ölüleri ele
 ./reconixia run -target hedef.com -katana            # aktif derin crawl (hedefe trafik üretir)
 ./reconixia run -target hedef.com -arjun             # gizli parametre keşfi (hedefe trafik üretir)
 ./reconixia run -target hedef.com -xss               # dalfox ile aktif XSS tespiti (parametreli URL'ler)
 ./reconixia run -target hedef.com -dast              # nuclei -dast fuzzing (aktif)
+./reconixia run -target hedef.com -ai                # tarama bitince otomatik AI triyaj (recon→AI tek komutta)
 ```
+
+`-ai` bayrağı, tarama tamamlandığında `RECONIXIA_AI_PROVIDER` (varsayılan `local`) sağlayıcısıyla AI triyajını otomatik çalıştırır ve `ai_analysis.json` / `ai_analysis.md` üretir. Ayrı bir `reconixia analyze` adımına gerek kalmaz.
 
 Varsayılan davranış:
 

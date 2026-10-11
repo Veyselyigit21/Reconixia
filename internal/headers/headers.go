@@ -3,12 +3,16 @@ package headers
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/Veyselyigit21/Reconixia/internal/researchheaders"
 	"github.com/Veyselyigit21/Reconixia/internal/safety"
 )
+
+// versionRe matches a version number like 1.2 or 2.4.57 in a header value.
+var versionRe = regexp.MustCompile(`\d+\.\d+`)
 
 type Finding struct {
 	Type       string `json:"type"`
@@ -66,6 +70,8 @@ func AnalyzeURL(client *http.Client, rawURL string, rules []string) []Finding {
 		{"X-Frame-Options", "missing_x_frame_options", "Clickjacking koruması eksik olabilir"},
 		{"X-Content-Type-Options", "missing_x_content_type_options", "nosniff header yok; MIME sniffing açısından incele"},
 		{"Referrer-Policy", "missing_referrer_policy", "Referrer policy yok; bilgi sızıntısı açısından incele"},
+		{"Cross-Origin-Opener-Policy", "missing_coop", "COOP header yok; cross-origin isolation açısından incele"},
+		{"Permissions-Policy", "missing_permissions_policy", "Permissions-Policy yok; tarayıcı özellik yüzeyi kısıtlanmamış"},
 	}
 	for _, m := range missing {
 		if h.Get(m.Header) == "" {
@@ -73,14 +79,57 @@ func AnalyzeURL(client *http.Client, rawURL string, rules []string) []Finding {
 		}
 	}
 
-	if csp := h.Get("Content-Security-Policy"); csp != "" {
-		lcsp := strings.ToLower(csp)
-		if strings.Contains(lcsp, "unsafe-inline") || strings.Contains(lcsp, "unsafe-eval") {
-			out = append(out, Finding{"weak_csp", rawURL, status, "low", "CSP içinde unsafe-inline/unsafe-eval görüldü; manuel değerlendir"})
+	// Sürüm bilgisi ifşası (bilgi sızıntısı; CVE eşleştirme kolaylaşır).
+	for _, hk := range []string{"Server", "X-Powered-By", "X-AspNet-Version", "X-AspNetMvc-Version", "X-Generator", "X-Runtime"} {
+		v := h.Get(hk)
+		if v != "" && versionRe.MatchString(v) {
+			out = append(out, Finding{"version_disclosure", rawURL, status, "low", hk + " sürüm bilgisi sızdırıyor: " + v})
 		}
 	}
 
+	if csp := h.Get("Content-Security-Policy"); csp != "" {
+		out = append(out, analyzeCSP(rawURL, status, csp)...)
+	}
+
 	return out
+}
+
+// analyzeCSP flags common CSP weaknesses: unsafe-inline/eval, wildcard sources,
+// and missing object-src / frame-ancestors hardening.
+func analyzeCSP(rawURL string, status int, csp string) []Finding {
+	var out []Finding
+	lcsp := strings.ToLower(csp)
+	scriptSrc := cspDirective(lcsp, "script-src")
+	if scriptSrc == "" {
+		scriptSrc = cspDirective(lcsp, "default-src")
+	}
+	if strings.Contains(scriptSrc, "unsafe-inline") || strings.Contains(scriptSrc, "unsafe-eval") {
+		out = append(out, Finding{"weak_csp", rawURL, status, "low", "CSP script-src içinde unsafe-inline/unsafe-eval; XSS azaltımı zayıf"})
+	}
+	for _, tok := range strings.Fields(scriptSrc) {
+		if tok == "*" || tok == "http:" || tok == "https:" || strings.HasPrefix(tok, "http://*") || strings.HasPrefix(tok, "https://*") {
+			out = append(out, Finding{"weak_csp_wildcard", rawURL, status, "low", "CSP script-src aşırı geniş kaynak içeriyor: " + tok})
+			break
+		}
+	}
+	if !strings.Contains(lcsp, "object-src") && !strings.Contains(cspDirective(lcsp, "default-src"), "'none'") {
+		out = append(out, Finding{"csp_missing_object_src", rawURL, status, "info", "CSP object-src 'none' yok; eklenti/obje tabanlı XSS yüzeyi kısıtlanmamış"})
+	}
+	if !strings.Contains(lcsp, "frame-ancestors") {
+		out = append(out, Finding{"csp_missing_frame_ancestors", rawURL, status, "info", "CSP frame-ancestors yok; clickjacking koruması CSP tarafında eksik"})
+	}
+	return out
+}
+
+// cspDirective returns the sources listed for a CSP directive (lowercased input).
+func cspDirective(lcsp, directive string) string {
+	for _, part := range strings.Split(lcsp, ";") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, directive+" ") || part == directive {
+			return strings.TrimSpace(strings.TrimPrefix(part, directive))
+		}
+	}
+	return ""
 }
 
 func FormatFinding(f Finding) string {

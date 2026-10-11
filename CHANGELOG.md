@@ -13,6 +13,10 @@ Genişletilmiş keşif modülleri (varsayılan güvenli posture korunarak).
 - Opsiyonel `-xss`: `dalfox` ile parametreli URL'lerde reflected/DOM XSS tespiti; scope/safety gate, rate-limit, research header, yalnızca tespit amaçlı varsayılan payloadlar (opt-in, aktif).
 - Opsiyonel `-dast`: `nuclei -dast` fuzzing/DAST şablonları (opt-in, aktif). `nuclei()` imzası DAST bayrağını alacak şekilde güncellendi.
 - Güvenlik sınırı korundu: reverse shell / persistence / destructive-silahlandırılmış payload üretimi hâlâ kapsam dışı; yeni modüller tespit/fuzzing ile sınırlı.
+- `-ai`: tarama bitince otomatik AI triyajı (`RECONIXIA_AI_PROVIDER`); `recon→AI` tek komutta, ayrı `analyze` adımı gerekmez.
+- Yeni `internal/webchecks` modülü (varsayılan açık, `-no-webchecks` ile kapatılır): tehlikeli HTTP metodları (TRACE/PUT/DELETE, XST), open redirect (owned marker ile doğrulama), host header yansıması, içerik imzasıyla doğrulanmış hassas dosya ifşası (`.git`/`.env`/`web.config`/yedek/DB), ve pasif SSRF/LFI/open-redirect aday-parametre etiketleme.
+- `internal/headers` güçlendirildi: `Server`/`X-Powered-By`/`X-AspNet-Version` sürüm ifşası, COOP + Permissions-Policy eksikliği, derinlemesine CSP zayıflıkları (wildcard kaynak, eksik object-src/frame-ancestors).
+- `webchecks` için birim testleri (param sınıflama + redirect eşleştirme) eklendi.
 - `httpx` artık JSON çıktısı üretip `processed/httpx_detailed.jsonl` dosyasına yazıyor; canlı host listesi buradan türetiliyor.
 - `install_tools.sh` ve `doctor` yeni opsiyonel araçları (assetfinder, katana, arjun) kapsayacak şekilde güncellendi.
 - Yeni `techrank` ve `cloudbuckets` paketleri için birim testleri eklendi.
